@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Informe TaDa (Bavaria) - Dashboard Operativo en tiempo real para medición de productividad, asistencia, confiabilidad y cobertura preventiva TaDa/Pibox.">
+  <title>Informe TaDa (Bavaria) · Automatización en Tiempo Real y Cobertura Preventiva</title>
+  
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  
+  <link rel="stylesheet" href="./css/styles.css?v=20260929_v15">
+  <link rel="icon" href="./assets/logo_pibox_tada.jpg" type="image/jpeg">
+</head>
+<body>
+
+  <!-- Encabezado Principal -->
+  <header class="app-header">
+    <div class="header-inner">
+      <div class="brand-section">
+        <img src="./assets/logo_pibox_tada.jpg" alt="Logo Pibox TaDa" class="brand-logo-img">
+        <div class="brand-titles">
+          <h1>
+            Informe TaDa
+            <span class="badge-bavaria">Bavaria</span>
+            <span class="live-indicator">
+              <span class="live-pulse"></span>
+              <span id="lastSyncLabel">Conectando en Vivo...</span>
+            </span>
+          </h1>
+          <p>Automatización en tiempo real · Confiabilidad · Cobertura preventiva y pool de suplentes</p>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <button id="btnSyncLive" class="btn btn-primary" title="Sincronizar ahora con los dos Google Sheets">
+          <span>🔄</span> Sincronizar Ahora
+        </button>
+        <button id="btnClearCacheSync" class="btn btn-secondary" title="Limpiar caché local y forzar sincronización total de las 6 ciudades">
+          <span>🧹</span> Limpiar Caché
+        </button>
+        <button id="btnOpenConfig" class="btn btn-secondary" title="Configurar pesos y umbrales">
+          <span>⚙️</span> Configurar Pesos
+        </button>
+        <button id="btnExportCsv" class="btn btn-secondary" title="Descargar CSV">
+          <span>📥</span> Exportar CSV
+        </button>
+        <button id="btnPrintPdf" class="btn btn-secondary" title="Imprimir informe en PDF">
+          <span>📄</span> Imprimir / PDF
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Banner de Contexto Temporal (Ventana Rodante 3 Semanas) -->
+  <div class="temporal-banner">
+    <div class="temporal-info" id="temporalBannerText">
+      <span>Calculando ventana temporal en tiempo real...</span>
+    </div>
+    <div id="temporalCuposAlert">
+      <!-- Alerta dinámica de cupos faltantes -->
+    </div>
+  </div>
+
+  <!-- Pestañas de Navegación Operativa -->
+  <nav class="nav-tabs-wrapper">
+    <div class="nav-tabs">
+      <button class="nav-tab active" data-tab="malla">
+        <span>⚡</span> Módulo 1: Confiabilidad & Productividad
+      </button>
+      <button class="nav-tab" data-tab="cobertura">
+        <span>🛡️</span> Módulo 2: Cobertura & Suplentes <span class="tab-badge tab-badge-alert">Preventivo</span>
+      </button>
+      <button class="nav-tab" data-tab="flota-critica">
+        <span>🚨</span> Módulo: Flota Crítica <span class="tab-badge tab-badge-alert">Top Riesgo</span>
+      </button>
+      <button class="nav-tab" data-tab="metricas">
+        <span>📊</span> Módulo 3: Analítica de Semanas <span class="tab-badge">Histórico</span>
+      </button>
+      <button class="nav-tab" data-tab="pilotos">
+        <span>👤</span> Ficha de Piloto <span class="tab-badge">360°</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- Contenido Principal -->
+  <main class="main-content">
+
+    <!-- Barra de Filtros Globales -->
+    <section class="filters-card">
+      <div class="filters-grid">
+        <div class="filter-group">
+          <label for="filterCity">Ciudad</label>
+          <select id="filterCity" class="filter-select">
+            <option value="">Todas las ciudades</option>
+          </select>
+        </div>
+
+        <div class="filter-group">
+          <label for="filterStore">Punto / Tienda</label>
+          <select id="filterStore" class="filter-select">
+            <option value="">Todos los puntos</option>
+          </select>
+        </div>
+
+        <div class="filter-group">
+          <label for="filterSemana">Semana Operativa</label>
+          <select id="filterSemana" class="filter-select">
+            <option value="">Todo el Histórico</option>
+          </select>
+        </div>
+
+        <div class="filter-group">
+          <label for="filterFrom">Desde</label>
+          <div class="hybrid-date-wrapper">
+            <input type="text" id="filterFrom" class="filter-input hybrid-date-text" placeholder="DD/MM/AAAA o AAAA-MM-DD" autocomplete="off">
+            <input type="date" id="filterFromPicker" class="hidden-native-picker" tabindex="-1">
+            <button type="button" class="btn-calendar-trigger" id="btnPickerFrom" title="Abrir calendario visual">📅</button>
+          </div>
+        </div>
+
+        <div class="filter-group">
+          <label for="filterTo">Hasta</label>
+          <div class="hybrid-date-wrapper">
+            <input type="text" id="filterTo" class="filter-input hybrid-date-text" placeholder="DD/MM/AAAA o AAAA-MM-DD" autocomplete="off">
+            <input type="date" id="filterToPicker" class="hidden-native-picker" tabindex="-1">
+            <button type="button" class="btn-calendar-trigger" id="btnPickerTo" title="Abrir calendario visual">📅</button>
+          </div>
+        </div>
+
+        <div class="filter-group">
+          <label>Día de la Semana</label>
+          <div id="filterDiaMulti" class="custom-multiselect"></div>
+        </div>
+
+        <div class="filter-group">
+          <label>Inicio de Turno</label>
+          <div id="filterInicioMulti" class="custom-multiselect"></div>
+        </div>
+
+        <div class="filter-group">
+          <label for="filterPilot">Buscar Piloto</label>
+          <input type="text" id="filterPilot" class="filter-input" placeholder="Nombre o ID del conductor...">
+        </div>
+
+        <div class="filter-group">
+          <label for="filterDemand">Demanda Tienda</label>
+          <select id="filterDemand" class="filter-select">
+            <option value="">Todas</option>
+            <option value="normal">Demanda Normal</option>
+            <option value="low">Alerta Baja Demanda (&lt;70%)</option>
+          </select>
+        </div>
+
+        <div class="filter-group" style="justify-content: flex-end;">
+          <button id="btnResetFilters" class="btn btn-secondary" style="height: 40px; width: 100%;">
+            Restablecer
+          </button>
+        </div>
+      </div>
+      <div id="syncLiveStatus" style="font-size: 0.75rem; margin-top: 10px; min-height: 18px;"></div>
+    </section>
+
+    <!-- Tarjetas KPI Superiores (9 Tarjetas Recalibradas Módulo 1) -->
+    <section id="kpisContainer" class="kpi-grid">
+      <!-- Generado dinámicamente: 9 KPIs oficiales -->
+    </section>
+
+    <!-- ============================================================
+         PESTAÑA 1: MÓDULO 1 - CONFIABILIDAD & PRODUCTIVIDAD
+         ============================================================ -->
+    <div id="tab-malla" class="tab-content">
+      
+      <!-- Banner Normativo Oficial y Match Compuesto -->
+      <div class="policy-banner">
+        <span style="font-size: 1.2rem;">ℹ️</span>
+        <div>
+          <strong>Regla Transversal de Match:</strong> Conciliación de <em>Piloto Cancela</em> vs <em>Reemplazo</em> en clave <code>[FECHA + TIENDA + INICIO]</code>.
+          <br>
+          <strong>Nuevos Rangos de Calibración de Productividad:</strong>
+          <span class="pill badge-optimo">🟢 Productivo (&gt;95%)</span>
+          <span class="pill badge-aceptable">🟡 Productividad Aceptable (90% a 94.99%)</span>
+          <span class="pill badge-baja">🟠 Productividad Baja (75% a 89.99%)</span>
+          <span class="pill badge-bajo">🔴 Improductivo (&lt;74.99%)</span>
+        </div>
+      </div>
+
+      <!-- Tabla de Productividad con Match Compuesto -->
+      <section class="section-panel">
+        <div class="panel-header" style="flex-wrap: wrap; gap: 12px;">
+          <div>
+            <div class="panel-title">⚡ Desempeño y Productividad por Turno (Match Compuesto)</div>
+            <div class="panel-subtitle" id="mallaRowsCount">Cargando 100% de los turnos filtrados...</div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px; margin-left: auto;">
+            <label style="font-size: 0.76rem; color: var(--text-muted); white-space: nowrap; margin: 0;">Filtrar por Estado:</label>
+            <div id="filterEstadoMulti" class="custom-multiselect" style="min-width: 200px;"></div>
+          </div>
+        </div>
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Día</th>
+                <th>Piloto / ID</th>
+                <th>Punto / Seller</th>
+                <th>Inicio</th>
+                <th>Estado</th>
+                <th>Paquetes Reales</th>
+                <th>Promedio de Paquetes (Meta)</th>
+                <th>Evaluación</th>
+                <th>Ficha</th>
+              </tr>
+            </thead>
+            <tbody id="tableMallaProductividad">
+              <!-- Generado dinámicamente al 100% sin truncamiento -->
+            </tbody>
+          </table>
+        </div>
+        <div class="table-footer-controls" style="justify-content: space-between;">
+          <div id="mallaPageSummary" style="color: var(--text-muted); font-size: 0.8rem;">
+            Renderizando el 100% de los turnos que cumplen el filtro (sin truncamiento ni paginación).
+          </div>
+          <div id="mallaTotalRenderedBadge" style="font-size: 0.78rem; font-weight: 600; color: var(--primary-light);"></div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ============================================================
+         PESTAÑA 2: MÓDULO 2 - PLANIFICACIÓN Y COBERTURA PREVENTIVA
+         ============================================================ -->
+    <div id="tab-cobertura" class="tab-content" style="display: none;">
+      
+      <div class="policy-banner" style="background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.3);">
+        <span style="font-size: 1.2rem;">🛡️</span>
+        <div>
+          <strong>Monitoreo de Cobertura y Scoring de Riesgo:</strong>
+          Toda tienda con cupo sin conductor, teléfono o ID cuenta como <strong>Cupo Faltante</strong>.
+          Si un piloto programado registra cancelaciones frecuentes en las últimas 3 semanas, se activa la alerta de <strong>Alto Riesgo</strong> para sugerir un suplente con anticipación.
+        </div>
+      </div>
+
+      <!-- Panel Resumen Semana Actual -->
+      <div id="currentWeekCoveragePanel" class="section-panel" style="border-color: rgba(139, 92, 246, 0.35); background: linear-gradient(135deg, rgba(139, 92, 246, 0.08) 0%, rgba(30, 23, 55, 0.8) 100%); margin-bottom: 20px;">
+        <div class="panel-header">
+          <div>
+            <div class="panel-title" style="color: var(--primary-light);">📅 Estado de Cobertura — Semana Actual</div>
+            <div class="panel-subtitle" id="currentWeekCoverageLabel">Calculando...</div>
+          </div>
+          <button class="btn btn-primary" onclick="document.getElementById('filterSemana')?.click(); renderModulo2Coverage();"
+            style="font-size:0.8rem;padding:6px 14px;">
+            🔄 Refrescar
+          </button>
+        </div>
+        <div id="currentWeekCoverageKpis" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px;">
+          <!-- Generado dinámicamente -->
+        </div>
+      </div>
+
+      <!-- Tabla Cobertura por Tienda -->
+      <section class="section-panel">
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">🏪 Monitoreo de Cobertura por Tienda (Tiempo Real)</div>
+            <div class="panel-subtitle">Cupos programados vs cupos vacantes por punto</div>
+          </div>
+        </div>
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Tienda / Punto</th>
+                <th>Ciudad</th>
+                <th>Cupos Requeridos</th>
+                <th>Asignados</th>
+                <th>Cupos Faltantes</th>
+                <th>% Cobertura</th>
+                <th>Acción Preventiva</th>
+              </tr>
+            </thead>
+            <tbody id="tableCoverageStores">
+              <!-- Generado dinámicamente -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Tabla de Turnos Programados con Scoring de Riesgo -->
+      <section class="section-panel">
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">🚨 Turnos Programados y Alertas de Reemplazo</div>
+            <div class="panel-subtitle">Scoring de riesgo cruzado con el historial de cancelaciones del Módulo 1</div>
+          </div>
+        </div>
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Tienda / Punto</th>
+                <th>Día</th>
+                <th>Horario</th>
+                <th>Piloto Asignado</th>
+                <th>Nivel de Riesgo</th>
+                <th>Diagnóstico Preventivo</th>
+                <th>Suplente</th>
+              </tr>
+            </thead>
+            <tbody id="tableScheduledShiftsRisk">
+              <!-- Generado dinámicamente -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <!-- ============================================================
+         PESTAÑA NUEVA: MÓDULO DE FLOTA CRÍTICA / BAJO RENDIMIENTO
+         ============================================================ -->
+    <div id="tab-flota-critica" class="tab-content" style="display: none;">
+
+      <!-- Banner de Control y Acciones -->
+      <section class="section-panel" style="margin-bottom: 20px;">
+        <div class="panel-header" style="flex-wrap: wrap; gap: 14px;">
+          <div>
+            <div class="panel-title">🚨 Ranking de Flota Crítica & Desempeño Operativo</div>
+            <div class="panel-subtitle">
+              Identificación de pilotos con alta recurrencia de cancelaciones y baja productividad.
+              <span style="color: var(--color-warning); font-weight: 600;">(Filtro de volumen: mínimo 2 turnos programados · Desempate por menor % de productividad)</span>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <button id="btnExportCriticalRanking" class="btn btn-primary" title="Descargar reporte consolidado en CSV con BOM UTF-8">
+              <span>📥</span> Exportar Ranking Crítico (CSV)
+            </button>
+          </div>
+        </div>
+
+        <!-- Mini-Tarjetas de Diagnóstico Crítico -->
+        <div class="kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin-top: 14px; gap: 14px;">
+          <div class="kpi-card kpi-rose">
+            <div class="kpi-icon">🚨</div>
+            <div class="kpi-label">Pilotos con Cancelaciones</div>
+            <div class="kpi-value" id="kpiCriticalPilotsCount">0</div>
+            <div class="kpi-sub">Con al menos 1 cancelación y ≥2 turnos en el periodo</div>
+          </div>
+          <div class="kpi-card kpi-amber">
+            <div class="kpi-icon">🚫</div>
+            <div class="kpi-label">Total Cancelaciones Evaluadas</div>
+            <div class="kpi-value" id="kpiCriticalTotalCancels">0</div>
+            <div class="kpi-sub">En el universo de pilotos con ≥2 turnos</div>
+          </div>
+          <div class="kpi-card kpi-blue">
+            <div class="kpi-icon">🏪</div>
+            <div class="kpi-label">Punto con Mayor Riesgo</div>
+            <div class="kpi-value" id="kpiCriticalTopStore" style="font-size: 1.3rem;">—</div>
+            <div class="kpi-sub" id="kpiCriticalTopStoreSub">Tienda con más eventos de cancelación</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- NUEVO: Top 3 Tiendas con Mayor Concentración de Cancelaciones -->
+      <section class="section-panel" style="margin-bottom: 20px;">
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">🏪 Top 3 Tiendas con Mayor Concentración de Cancelaciones</div>
+            <div class="panel-subtitle">Puntos operativos donde más cancelaciones se produjeron (Haz clic en "Auditar Tienda" para cargar su Top 5 de pilotos)</div>
+          </div>
+        </div>
+        <div id="top3StoresContainer" class="chart-grid-3">
+          <!-- Tarjetas del Top 3 de Tiendas generadas dinámicamente -->
+        </div>
+      </section>
+
+      <!-- Componente 1: Top 5 Peores Pilotos por Tienda (PUNTO/Seller) -->
+      <section class="section-panel" style="margin-bottom: 20px;">
+        <div class="panel-header" style="flex-wrap: wrap; gap: 12px;">
+          <div>
+            <div class="panel-title">🏪 Componente 1: Top 5 Peores Pilotos por Tienda (PUNTO / Seller)</div>
+            <div class="panel-subtitle">Pilotos con peor rendimiento en la tienda (Prioriza: 1° Mayor Cancelación → 2° Menor % Productividad)</div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <label for="rankingStoreSelect" style="font-size: 0.82rem; color: var(--text-muted); font-weight: 600;">Seleccionar Tienda:</label>
+            <select id="rankingStoreSelect" class="filter-select" style="min-width: 220px;">
+              <!-- Llenado dinámicamente -->
+            </select>
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th style="width: 70px;">Posición</th>
+                <th>Piloto / ID</th>
+                <th>Tienda</th>
+                <th style="text-align: center;">N° Cancelaciones</th>
+                <th style="text-align: center;">Turnos Realizados</th>
+                <th style="text-align: center;">% Productividad (Meta)</th>
+                <th style="text-align: center;">Score de Riesgo</th>
+                <th style="text-align: center;">Status</th>
+                <th style="text-align: center;">Acción</th>
+              </tr>
+            </thead>
+            <tbody id="tableTop5Store">
+              <!-- Llenado dinámicamente -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Componente 2: Escalafón Global Top 10 con Más Cancelaciones -->
+      <section class="section-panel">
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">🌐 Componente 2: Escalafón Global Top 10 con Más Cancelaciones</div>
+            <div class="panel-subtitle">Ranking global de los 10 pilotos con mayor recurrencia de cancelaciones en toda la operación (mínimo 2 turnos)</div>
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th style="width: 70px;">Ranking</th>
+                <th>Piloto / ID</th>
+                <th>Tiendas donde Opera</th>
+                <th style="text-align: center;">Total Cancelaciones</th>
+                <th style="text-align: center;">Turnos Programados</th>
+                <th style="text-align: center;">% Impacto Cancelación</th>
+                <th style="text-align: center;">Prod. Promedio</th>
+                <th style="text-align: center;">Score Riesgo</th>
+                <th style="text-align: center;">Acción Sugerida</th>
+                <th style="text-align: center;">Detalle</th>
+              </tr>
+            </thead>
+            <tbody id="tableTop10Global">
+              <!-- Llenado dinámicamente -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- ============================================================
+         PESTAÑA 3: MÓDULO 3 - ANALÍTICA DE SEMANAS Y COMPARATIVO
+         ============================================================ -->
+    <div id="tab-metricas" class="tab-content" style="display: none;">
+      
+      <!-- Panel Superior: Selección de Semana -->
+      <section class="section-panel" style="margin-bottom: 20px;">
+        <div class="panel-header">
+          <div>
+            <div class="panel-title" id="modulo3WeekTitle">📊 Analítica y Métricas por Semana Operativa</div>
+            <div class="panel-subtitle" id="modulo3WeekSubtitle">Selecciona una semana específica para inspeccionar turnos, productividad y cumplimiento de cupos</div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <label for="modulo3WeekSelect" style="font-size: 0.82rem; color: var(--text-muted); font-weight: 600;">Semana:</label>
+            <select id="modulo3WeekSelect" class="filter-select" style="min-width: 240px;">
+              <!-- Llenado dinámicamente -->
+            </select>
+          </div>
+        </div>
+
+        <div class="chart-grid-3">
+          <!-- Gráfico 1: Cumplimiento de Turnos -->
+          <div class="section-panel" style="background: var(--bg-card); margin-bottom: 0;">
+            <div class="panel-header">
+              <div class="panel-title" style="font-size: 0.95rem;">🎯 Cumplimiento de Asistencia</div>
+            </div>
+            <div class="chart-container">
+              <canvas id="chartTurnCompliance"></canvas>
+            </div>
+          </div>
+
+          <!-- Gráfico 2: Demanda vs Productividad -->
+          <div class="section-panel" style="background: var(--bg-card); margin-bottom: 0;">
+            <div class="panel-header">
+              <div class="panel-title" style="font-size: 0.95rem;">⚡ Demanda vs Productividad (paq/h)</div>
+            </div>
+            <div class="chart-container">
+              <canvas id="chartDemandProdWeekly"></canvas>
+            </div>
+          </div>
+
+          <!-- Gráfico 3: Cobertura por Tienda -->
+          <div class="section-panel" style="background: var(--bg-card); margin-bottom: 0;">
+            <div class="panel-header">
+              <div class="panel-title" style="font-size: 0.95rem;">🏪 Cobertura y Faltantes por Punto</div>
+            </div>
+            <div class="chart-container">
+              <canvas id="chartCoverageStore"></canvas>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Panel de Tendencia y Comparativo Histórico Semana a Semana -->
+      <section class="section-panel">
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">📈 Tendencia y Evolución Histórica de Semanas Pasadas</div>
+            <div class="panel-subtitle">Comportamiento semana a semana de cumplimiento de asistencia, cancelaciones y paquetería entregada</div>
+          </div>
+        </div>
+
+        <div class="chart-grid-2">
+          <!-- Gráfico Tendencia de Asistencia y Cancelación -->
+          <div class="section-panel" style="background: var(--bg-card); margin-bottom: 0;">
+            <div class="panel-header">
+              <div class="panel-title" style="font-size: 0.95rem;">🛡️ Evolución de Asistencia vs Cancelación (%)</div>
+            </div>
+            <div class="chart-container">
+              <canvas id="chartWeeklyTrend"></canvas>
+            </div>
+          </div>
+
+          <!-- Gráfico Volumen de Paquetes Entregados -->
+          <div class="section-panel" style="background: var(--bg-card); margin-bottom: 0;">
+            <div class="panel-header">
+              <div class="panel-title" style="font-size: 0.95rem;">📦 Paquetes Entregados por Semana</div>
+            </div>
+            <div class="chart-container">
+              <canvas id="chartWeeklyVolume"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tabla Resumen de Semanas Pasadas -->
+        <div style="margin-top: 24px;">
+          <div class="panel-header">
+            <div class="panel-title" style="font-size: 1rem;">📋 Resumen Operativo Semana a Semana</div>
+            <div style="font-size: 0.8rem; color: var(--text-muted);" id="weeklyTableCityNote">Todas las ciudades</div>
+          </div>
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Semana</th>
+                  <th>Rango de Fechas</th>
+                  <th>Turnos Requeridos</th>
+                  <th>Asistencia (%)</th>
+                  <th>Cancelación (%)</th>
+                  <th>Cobertura Cupos (%)</th>
+                  <th>Puntualidad (%)</th>
+                  <th>Paquetes Entregados</th>
+                  <th>Prod. Promedio</th>
+                  <th>Acción</th>
+                </tr>
+              </thead>
+              <tbody id="tableWeeklyHistoricalSummary">
+                <!-- Generado dinámicamente -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ============================================================
+         PESTAÑA 4: FICHA 360° DEL PILOTO
+         ============================================================ -->
+    <div id="tab-pilotos" class="tab-content" style="display: none;">
+      <!-- Buscador predictivo -->
+      <div style="position: relative; margin-bottom: 20px;">
+        <input type="text" id="profileSearchInput" class="filter-input" style="height: 48px; font-size: 1rem; padding-left: 16px;" placeholder="🔍 Escribe el nombre o ID del piloto para consultar su ficha 360°...">
+        <div id="profileSearchDropdown" style="display: none; position: absolute; top: 52px; left: 0; right: 0; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); box-shadow: var(--shadow-md); z-index: 50; max-height: 280px; overflow-y: auto;"></div>
+      </div>
+
+      <section class="pilot-profile-card">
+        <div class="profile-top">
+          <div class="profile-identity">
+            <div class="profile-avatar" id="profileAvatarLetter">P</div>
+            <div class="profile-info">
+              <h2 id="profilePilotName">Selecciona un piloto</h2>
+              <p id="profilePilotMeta">ID: — · Tel: — · Ciudad: — · Tienda habitual: —</p>
+            </div>
+          </div>
+
+          <div class="profile-recommendation">
+            <div class="score-badge-large" id="profileScoreValue">
+              — <span>/100</span>
+            </div>
+            <span class="pill pill-neutral" id="profileRecBadge">Evaluando...</span>
+            <p id="profileRecDesc" style="font-size: 0.78rem; color: var(--text-muted); max-width: 320px; text-align: right;">
+              Índice ponderado según productividad, asistencia, cancelación, puntualidad y SLA.
+            </p>
+          </div>
+        </div>
+
+        <!-- Desglose de 5 Factores -->
+        <div class="factors-breakdown">
+          <div class="factor-item">
+            <div class="factor-title">Productividad vs Meta (35%)</div>
+            <div class="factor-score" id="factorScoreProd">—</div>
+            <div class="factor-bar"><div class="factor-bar-fill" id="factorBarProd" style="width: 0%;"></div></div>
+          </div>
+          <div class="factor-item">
+            <div class="factor-title">Asistencia (25%)</div>
+            <div class="factor-score" id="factorScoreAssist">—</div>
+            <div class="factor-bar"><div class="factor-bar-fill" id="factorBarAssist" style="width: 0%;"></div></div>
+          </div>
+          <div class="factor-item">
+            <div class="factor-title">Baja Cancelación (20%)</div>
+            <div class="factor-score" id="factorScoreCancel">—</div>
+            <div class="factor-bar"><div class="factor-bar-fill" id="factorBarCancel" style="width: 0%;"></div></div>
+          </div>
+          <div class="factor-item">
+            <div class="factor-title">Puntualidad Llegada (10%)</div>
+            <div class="factor-score" id="factorScorePunct">—</div>
+            <div class="factor-bar"><div class="factor-bar-fill" id="factorBarPunct" style="width: 0%;"></div></div>
+          </div>
+          <div class="factor-item">
+            <div class="factor-title">SLA 35 Min (10%)</div>
+            <div class="factor-score" id="factorScoreSla">—</div>
+            <div class="factor-bar"><div class="factor-bar-fill" id="factorBarSla" style="width: 0%;"></div></div>
+          </div>
+        </div>
+
+        <!-- Historial de turnos del piloto -->
+        <div class="panel-header" style="margin-top: 24px;">
+          <div class="panel-title">📜 Historial de Turnos (Últimas 3 Semanas)</div>
+        </div>
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Tienda / Seller</th>
+                <th>Estado</th>
+                <th>Inicio</th>
+                <th>Llegada</th>
+                <th>Paquetes Reales</th>
+                <th>Meta Esperada</th>
+                <th>Evaluación</th>
+                <th>Contexto</th>
+              </tr>
+            </thead>
+            <tbody id="profileShiftHistory">
+              <!-- Generado dinámicamente -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+  </main>
+
+  <!-- MODAL: POOL DE SUPLENTES (3 CRITERIOS OFICIALES) -->
+  <div id="modalSuplentes" class="modal-overlay">
+    <div class="modal-box">
+      <div class="modal-header">
+        <div>
+          <h3 style="display:flex;align-items:center;gap:8px;">
+            <span>👥</span> Banca de Suplentes Disponibles
+          </h3>
+          <p id="suplentesModalTitle" style="font-size:0.8rem;color:var(--text-muted);margin-top:4px;"></p>
+        </div>
+        <button id="btnCloseSuplentes" class="modal-close">&times;</button>
+      </div>
+      <div>
+        <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:16px;">
+          Pilotos calificados bajo los <strong>3 criterios obligatorios</strong>: (1) Frecuencia y cumplimiento en la tienda, (2) Turnos similares (horario afín), y (3) Efectividad histórica en ese día de la semana.
+        </p>
+        <div id="suplentesListContainer">
+          <!-- Generado dinámicamente -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: CONFIGURAR PESOS Y UMBRALES -->
+  <div id="modalConfig" class="modal-overlay">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>⚙️ Calibración del Índice de Confiabilidad</h3>
+        <button id="btnCloseConfig" class="modal-close">&times;</button>
+      </div>
+      <div>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 20px;">
+          Ajusta la ponderación de los 5 factores. La suma debe ser exactamente 100%.
+        </p>
+
+        <div style="display: flex; flex-direction: column; gap: 14px; margin-bottom: 20px;">
+          <div class="filter-group">
+            <label>Productividad vs Meta (%)</label>
+            <input type="number" id="cfgWeightProd" class="filter-input" min="0" max="100">
+          </div>
+          <div class="filter-group">
+            <label>Asistencia (%)</label>
+            <input type="number" id="cfgWeightAssist" class="filter-input" min="0" max="100">
+          </div>
+          <div class="filter-group">
+            <label>Cancelación (%)</label>
+            <input type="number" id="cfgWeightCancel" class="filter-input" min="0" max="100">
+          </div>
+          <div class="filter-group">
+            <label>Puntualidad (%)</label>
+            <input type="number" id="cfgWeightPunct" class="filter-input" min="0" max="100">
+          </div>
+          <div class="filter-group">
+            <label>SLA 35 Min (%)</label>
+            <input type="number" id="cfgWeightSla" class="filter-input" min="0" max="100">
+          </div>
+        </div>
+
+        <h4 style="font-size: 0.95rem; color: #fff; margin-bottom: 12px; border-top: 1px solid var(--border-subtle); padding-top: 16px;">
+          Umbrales de Alertas
+        </h4>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
+          <div class="filter-group" style="grid-column: 1 / -1;">
+            <label>🚨 Umbral de Riesgo de Cancelación para Reemplazo Preventivo (%). Por defecto: 10%</label>
+            <input type="number" id="cfgRiskThreshold" class="filter-input" step="1" min="1" max="50" placeholder="Ej: 10">
+            <small style="color: var(--text-muted); font-size: 0.72rem;">Si un piloto supera este % de cancelación en las últimas 3 semanas, se activa la alerta 🚨 Alto Riesgo en el Módulo 2.</small>
+          </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 24px;">
+          <div class="filter-group">
+            <label>Asistencia Verde (≥ %)</label>
+            <input type="number" id="cfgAttGreen" class="filter-input" step="0.5">
+          </div>
+          <div class="filter-group">
+            <label>Asistencia Amarillo (≥ %)</label>
+            <input type="number" id="cfgAttYellow" class="filter-input" step="0.5">
+          </div>
+          <div class="filter-group">
+            <label>Cancelación Verde (≤ %)</label>
+            <input type="number" id="cfgCanGreen" class="filter-input" step="0.5">
+          </div>
+          <div class="filter-group">
+            <label>Cancelación Amarillo (≤ %)</label>
+            <input type="number" id="cfgCanYellow" class="filter-input" step="0.5">
+          </div>
+        </div>
+
+        <h4 style="font-size: 0.95rem; color: #fff; margin-bottom: 12px; border-top: 1px solid var(--border-subtle); padding-top: 16px;">
+          Calibración de Productividad por Turno (Match Compuesto)
+        </h4>
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 14px;">
+          Rangos oficiales para evaluar el cumplimiento real vs promedio esperado del turno.
+        </p>
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 24px;">
+          <div class="filter-group">
+            <label style="color:#10b981;font-weight:700;">🟢 Productivo (&gt; %)</label>
+            <input type="number" id="cfgProdProductive" class="filter-input" step="0.1" min="0" max="200" placeholder="95.0">
+          </div>
+          <div class="filter-group">
+            <label style="color:#f59e0b;font-weight:700;">🟡 Aceptable (≥ %)</label>
+            <input type="number" id="cfgProdAcceptable" class="filter-input" step="0.1" min="0" max="200" placeholder="90.0">
+          </div>
+          <div class="filter-group">
+            <label style="color:#fb923c;font-weight:700;">🟠 Baja (≥ %)</label>
+            <input type="number" id="cfgProdLow" class="filter-input" step="0.1" min="0" max="200" placeholder="75.0">
+          </div>
+        </div>
+        <small style="color: var(--text-muted); font-size: 0.72rem; display: block; margin-top: -16px; margin-bottom: 20px;">
+          Valores inferiores a Productividad Baja (&lt;74.99%) se clasifican automáticamente como 🔴 Improductivo.
+        </small>
+
+        <div style="display: flex; justify-content: space-between; gap: 12px;">
+          <button id="btnResetConfig" class="btn btn-secondary">Restablecer Valores</button>
+          <button id="btnSaveConfig" class="btn btn-primary">Guardar y Recalcular</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Librerías de Terceros (Locales) -->
+  <script src="./js/vendor/xlsx.full.min.js"></script>
+  <script src="./js/vendor/chart.umd.min.js"></script>
+
+  <!-- Módulos de la Aplicación -->
+  <script src="./js/config.js?v=20260929_v15"></script>
+  <script src="./js/productivity-matrix.js?v=20260929_v15"></script>
+  <script src="./js/rules.js?v=20260929_v15"></script>
+  <script src="./js/storage-db.js?v=20260929_v15"></script>
+  <script src="./js/sheets-service.js?v=20260929_v15"></script>
+  <script src="./js/coverage-engine.js?v=20260929_v15"></script>
+  <script src="./js/charts.js?v=20260929_v15"></script>
+  <script src="./js/data.js?v=20260929_v15"></script>
+  <script src="./js/app.js?v=20260929_v15"></script>
+</body>
+</html>
