@@ -688,6 +688,19 @@ function calculateModulo1Kpis(shifts, config = (typeof APP_CONFIG !== 'undefined
     const rawSt = String(s.status || '').trim();
     const st = rawSt.toLowerCase();
 
+    // Identificación canónica y normalizada del piloto (por ID o nombre)
+    const rawPilotId = s.pilot_id ? String(s.pilot_id).trim() : '';
+    const cleanPilotId = (rawPilotId && rawPilotId !== '—' && rawPilotId !== '-' && rawPilotId.toLowerCase() !== 'null' && rawPilotId.toLowerCase() !== 'undefined')
+      ? rawPilotId.toLowerCase()
+      : null;
+
+    const rawPilotName = s.pilot ? String(s.pilot).trim() : '';
+    const cleanPilotName = (rawPilotName && rawPilotName !== '—' && rawPilotName !== '-' && rawPilotName.toLowerCase() !== 'sin piloto')
+      ? rawPilotName.toLowerCase()
+      : null;
+
+    const pilotKey = cleanPilotId || (cleanPilotName ? `NAME_${cleanPilotName}` : null);
+
     // Conteo de eventos de cancelación operativa
     if (st === 'piloto cancela' || st === 'cancela piloto' || st === 'piloto canceló' || st === 'piloto cancelo' || (st.includes('piloto') && st.includes('cancel'))) {
       penalizedPilotCancel++;
@@ -799,18 +812,6 @@ function calculateModulo1Kpis(shifts, config = (typeof APP_CONFIG !== 'undefined
     // 6. PILOTOS ACTIVOS (Conteo estricto de ID únicos en el período seleccionado)
     // Cada ID de piloto debe contabilizarse una sola vez dentro del período seleccionado,
     // normalizado para evitar duplicidades por mayúsculas/minúsculas o tiendas distintas.
-    const rawPilotId = s.pilot_id ? String(s.pilot_id).trim() : '';
-    const cleanPilotId = (rawPilotId && rawPilotId !== '—' && rawPilotId !== '-' && rawPilotId.toLowerCase() !== 'null' && rawPilotId.toLowerCase() !== 'undefined')
-      ? rawPilotId.toLowerCase()
-      : null;
-
-    const rawPilotName = s.pilot ? String(s.pilot).trim() : '';
-    const cleanPilotName = (rawPilotName && rawPilotName !== '—' && rawPilotName !== '-' && rawPilotName.toLowerCase() !== 'sin piloto')
-      ? rawPilotName.toLowerCase()
-      : null;
-
-    const pilotKey = cleanPilotId || (cleanPilotName ? `NAME_${cleanPilotName}` : null);
-
     if (pilotKey) {
       if (!uniquePilotsMap.has(pilotKey)) {
         uniquePilotsMap.set(pilotKey, { id: cleanPilotId || rawPilotName, name: rawPilotName, attended: 0, total: 0 });
