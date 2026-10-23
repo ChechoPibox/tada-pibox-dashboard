@@ -122,8 +122,39 @@ function classifyShiftStatus(rawStatus) {
     };
   }
 
-  // Estados cancelados por piloto
-  if (s === 'piloto cancela' || s === 'cancela piloto' || s === 'piloto canceló') {
+  // Estados excluidos expresos según normativa operativa:
+  // - Tienda cerrada (establecimiento sin operación)
+  // - Adicional no autorizado (turno extra sin autorización)
+  // - Cliente cancela / Adicional cancelado / No programado
+  // No penalizan la asistencia, no afectan cancelaciones del piloto ni perjudican su score.
+  if (
+    s.includes('tienda cerrada') ||
+    s === 'cerrada' ||
+    s.includes('adicional no autoriz') ||
+    s.includes('no autorizado') ||
+    s.includes('cliente cancela') ||
+    s.includes('cancela cliente') ||
+    s.includes('adicional cancel') ||
+    s.includes('no programado')
+  ) {
+    return {
+      status: rawStatus,
+      evaluable: false,
+      attended: false,
+      pilotCancel: false,
+      excluded: true,
+      category: 'EXCLUIDO'
+    };
+  }
+
+  // Estados cancelados por piloto (atribuibles directamente al conductor)
+  if (
+    s === 'piloto cancela' ||
+    s === 'cancela piloto' ||
+    s === 'piloto canceló' ||
+    s === 'piloto cancelo' ||
+    (s.includes('piloto') && s.includes('cancel'))
+  ) {
     return {
       status: rawStatus,
       evaluable: true,
@@ -134,7 +165,9 @@ function classifyShiftStatus(rawStatus) {
     };
   }
 
-  // Estados excluidos según normativa oficial (no afectan responsabilidad del piloto)
+  // Registros sin causal suficientemente clara o no reconocidos:
+  // Según normativa oficial: no clasificar automáticamente como falta atribuible al piloto.
+  // Se marcan como excluidos de penalización directa para evitar castigos injustificados.
   return {
     status: rawStatus,
     evaluable: false,
@@ -387,8 +420,12 @@ function reconcileShiftsMatch(shifts) {
     //    - Adicional Autorizado: turno extra autorizado puntualmente, no es un cupo de la malla base.
     //    - Adicional Cancela / Adicional Cancelado: cancelación de un adicional, no aplica a la malla.
     const isExcluded = (
-      st === 'tienda cerrada' ||
+      st.includes('tienda cerrada') ||
+      st === 'cerrada' ||
+      st.includes('adicional no autoriz') ||
+      st.includes('no autorizado') ||
       st === 'cliente cancela' ||
+      st === 'cancela cliente' ||
       st === 'adicional autorizado' ||
       st === 'adicional cancela' ||
       st === 'adicional cancelado'
@@ -601,20 +638,10 @@ function calculateModulo1Kpis(shifts, config = (typeof APP_CONFIG !== 'undefined
   const cancellationNetRatePct = (matchResult.totalUnmatchedCancels / totalBaseDenominator) * 100;
 
   // ── COBERTURA DE CUPOS (Fórmula oficial validada) ─────────────────────────────────────────
-  //
-  // CASO DE PRUEBA → Cra 91, Semana 38:
-  //   Turnos Requeridos = 28  |  Reemplazos = 8
-  //   (28 + 8) / 28 × 100 = 128.57% ≈ 129% ✓
-  //
-  // Fórmula:
-  //   Numerador   = Turnos Requeridos + Pilotos de Reemplazo
-  //                 → total de recursos desplegados: demanda base + refuerzo adicional
-  //   Denominador = Turnos Requeridos
-  //                 → cupos/turnos planificados originalmente (del match, sin filas de reemplazo)
-  //
-  // Puede superar el 100% cuando los reemplazos superan la demanda base (cobertura en exceso).
+  // Cobertura real de cupos: Total de turnos cubiertos (activos + reemplazos requeridos)
+  // respecto a los turnos requeridos por la operación (demanda base).
   const cuposTurnRequeridos  = Math.max(1, matchResult.totalSlotsRequired);    // demanda base del match
-  const cuposCoveredNumerator = cuposTurnRequeridos + matchResult.totalReplacements; // requeridos + refuerzos
+  const cuposCoveredNumerator = matchResult.totalSlotsCovered;                  // turnos efectivamente cubiertos
   const cuposMallaBase        = cuposTurnRequeridos;                            // denominador = demanda base
   const cuposCoveragePctNew   = (cuposCoveredNumerator / cuposMallaBase) * 100;
 
@@ -624,7 +651,7 @@ function calculateModulo1Kpis(shifts, config = (typeof APP_CONFIG !== 'undefined
 
   const activePilotsCount = uniquePilotsMap.size;
 
-  const totalManagedHours = totalBaseDenominator * 8;
+  const totalManagedHours = (matchResult.totalSlotsCovered > 0 ? matchResult.totalSlotsCovered : totalBaseDenominator) * 8;
   const fleetProductivityPaqH = totalManagedHours > 0
     ? (totalPaquetesEntregados / totalManagedHours)
     : 0;
@@ -681,16 +708,35 @@ function calculateModulo1Kpis(shifts, config = (typeof APP_CONFIG !== 'undefined
  * Agrega métricas para un conjunto de filas (turnos) según las fórmulas oficiales.
  */
 function aggregateShiftMetrics(rows, config = APP_CONFIG) {
-  const totalShifts = rows.length;
-  const evaluable = rows.filter(r => r.evaluable);
-  const attended = evaluable.filter(r => r.attended);
-  const pilotCancels = evaluable.filter(r => r.pilot_cancel || r.pilotCancel);
-  const excluded = rows.filter(r => r.excluded);
+  const totalShifts = rows ? rows.length : 0;
+  const evaluable = (rows || []).filter(r => {
+    if (r.evaluable !== undefined) return Boolean(r.evaluable);
+    if (r.excluded === true) return false;
+    if (r.attended === true || r.pilot_cancel === true || r.pilotCancel === true) return true;
+    const cls = typeof classifyShiftStatus === 'function' ? classifyShiftStatus(r.status) : null;
+    return cls ? cls.evaluable : false;
+  });
+  const attended = evaluable.filter(r => {
+    if (r.attended !== undefined) return Boolean(r.attended);
+    const cls = typeof classifyShiftStatus === 'function' ? classifyShiftStatus(r.status) : null;
+    return cls ? cls.attended : false;
+  });
+  const pilotCancels = evaluable.filter(r => {
+    if (r.pilot_cancel !== undefined) return Boolean(r.pilot_cancel);
+    if (r.pilotCancel !== undefined) return Boolean(r.pilotCancel);
+    const cls = typeof classifyShiftStatus === 'function' ? classifyShiftStatus(r.status) : null;
+    return cls ? cls.pilotCancel : false;
+  });
+  const excluded = rows.filter(r => {
+    if (r.excluded !== undefined) return Boolean(r.excluded);
+    const cls = typeof classifyShiftStatus === 'function' ? classifyShiftStatus(r.status) : null;
+    return cls ? cls.excluded : false;
+  });
 
   const tolerance = config.punctualityToleranceMinutes || 0;
   const withArrival = attended.filter(r => r.start != null && r.arrival != null);
   const punctualShifts = withArrival.filter(r => {
-    return Number(r.arrival) <= (Number(r.start) + tolerance);
+    return isShiftPunctualWithGabela(r.start, r.arrival);
   });
 
   const attendancePct = evaluable.length > 0
@@ -719,6 +765,12 @@ function aggregateShiftMetrics(rows, config = APP_CONFIG) {
     ? (productivity / (avgTarget / 8)) * 100
     : null;
 
+  // Cumplimiento real de SLA 35 (en turnos asistidos con entregas)
+  const withSla = attended.filter(r => r.sla35 != null && !isNaN(r.sla35) && (Number(r.packages) || 0) > 0);
+  const avgSla35 = withSla.length > 0
+    ? (withSla.reduce((sum, r) => sum + Number(r.sla35), 0) / withSla.length) * 100
+    : null;
+
   const lowDemandCount = rows.filter(r => r.low_demand).length;
 
   return {
@@ -737,6 +789,7 @@ function aggregateShiftMetrics(rows, config = APP_CONFIG) {
     productivity,
     avgTarget,
     compliancePct,
+    avgSla35,
     lowDemandCount
   };
 }
@@ -745,14 +798,33 @@ function aggregateShiftMetrics(rows, config = APP_CONFIG) {
  * Calcula el Índice de Confiabilidad (0 a 100) para un piloto.
  */
 function calculateReliabilityScore(metrics, config = APP_CONFIG) {
-  if (!metrics || metrics.evaluableCount === 0) {
+  if (!metrics) {
     return {
       score: null,
       subscores: {},
       badge: 'Sin turnos evaluables',
       level: 'none',
       badgeClass: 'pill-neutral',
-      description: 'El piloto no cuenta con turnos evaluables en el período seleccionado.'
+      description: 'Sin datos disponibles para evaluar.'
+    };
+  }
+
+  // Si tiene turnos asistidos o cancelados, asegurar que evaluableCount no sea 0
+  const realAttended = metrics.attendedCount || 0;
+  const realCancels = metrics.pilotCancelCount || 0;
+  const activeCount = realAttended + realCancels;
+  const effectiveEvaluable = Math.max(metrics.evaluableCount || 0, activeCount);
+
+  if (effectiveEvaluable === 0) {
+    return {
+      score: null,
+      subscores: {},
+      badge: 'Sin turnos evaluables',
+      level: 'none',
+      badgeClass: 'pill-neutral',
+      description: metrics.totalShifts > 0
+        ? 'El piloto solo registra turnos excluidos (tienda cerrada o cancelados por cliente).'
+        : 'El piloto no cuenta con turnos registrados en la base de datos.'
     };
   }
 
@@ -767,22 +839,20 @@ function calculateReliabilityScore(metrics, config = APP_CONFIG) {
   }
 
   // 2. Subscore Asistencia (0 - 100)
-  const subAttendance = metrics.attendancePct != null
-    ? Math.min(100, Math.max(0, metrics.attendancePct))
-    : 50;
+  const attPct = metrics.attendancePct != null ? metrics.attendancePct : (effectiveEvaluable > 0 ? (realAttended / effectiveEvaluable) * 100 : 100);
+  const subAttendance = Math.min(100, Math.max(0, attPct));
 
   // 3. Subscore Cancelación (0 - 100, invertido)
   let subCancellation = 100;
-  if (metrics.cancellationPct != null) {
-    const c = metrics.cancellationPct;
-    if (c === 0) subCancellation = 100;
-    else if (c <= config.cancellationGreen) {
-      subCancellation = 100 - (c / config.cancellationGreen) * 15;
-    } else if (c <= config.cancellationYellow) {
-      subCancellation = 85 - ((c - config.cancellationGreen) / (config.cancellationYellow - config.cancellationGreen)) * 35;
-    } else {
-      subCancellation = Math.max(0, 50 - ((c - config.cancellationYellow) / 15) * 50);
-    }
+  const canPct = metrics.cancellationPct != null ? metrics.cancellationPct : (effectiveEvaluable > 0 ? (realCancels / effectiveEvaluable) * 100 : 0);
+  if (canPct === 0) {
+    subCancellation = 100;
+  } else if (canPct <= config.cancellationGreen) {
+    subCancellation = 100 - (canPct / config.cancellationGreen) * 15;
+  } else if (canPct <= config.cancellationYellow) {
+    subCancellation = 85 - ((canPct - config.cancellationGreen) / (config.cancellationYellow - config.cancellationGreen)) * 35;
+  } else {
+    subCancellation = Math.max(0, 50 - ((canPct - config.cancellationYellow) / 15) * 50);
   }
 
   // 4. Subscore Puntualidad (0 - 100)
@@ -790,8 +860,11 @@ function calculateReliabilityScore(metrics, config = APP_CONFIG) {
     ? Math.min(100, Math.max(0, metrics.punctualityPct))
     : (metrics.attendedCount > 0 ? 90 : 50);
 
-  // 5. Subscore SLA 35 (0 - 100)
-  const subSla = 88;
+  // 5. Subscore SLA 35 (0 - 100): cálculo dinámico con datos reales de la operación
+  let subSla = 85; // neutral si el piloto no ha registrado despachos con métrica SLA
+  if (metrics.avgSla35 != null) {
+    subSla = Math.min(100, Math.max(0, metrics.avgSla35));
+  }
 
   const totalWeight = (weights.productivity || 0) + (weights.attendance || 0) +
                       (weights.cancellation || 0) + (weights.punctuality || 0) + (weights.sla35 || 0);
@@ -865,16 +938,16 @@ function getPilotRecommendation(score, metrics, config = APP_CONFIG) {
 // ============================================================
 // MÓDULO DE RANKINGS DE FLOTA CRÍTICA / BAJO RENDIMIENTO
 // Reglas oficiales:
-// 1. Filtro mínimo de 2 turnos programados en el rango filtrado.
+// 1. Filtro mínimo de 1 turno programado en el rango filtrado.
 // 2. Ordenamiento: Mayor cantidad de cancelaciones -> Menor % de productividad (desempate).
 // 3. Score combinado de riesgo (cancelación + baja productividad).
 // ============================================================
 
 const RankingFlotaCriticaEngine = {
-  MIN_SHIFTS_REQUIRED: 2,
+  MIN_SHIFTS_REQUIRED: 1,
 
   /**
-   * Extrae el resumen consolidado de cada piloto evaluable (mínimo 2 turnos)
+   * Extrae el resumen consolidado de cada piloto evaluable (mínimo 1 turno)
    */
   getPilotsSummary(shifts) {
     const pilotMap = {};
@@ -889,13 +962,16 @@ const RankingFlotaCriticaEngine = {
         pilotMap[key] = {
           pilot: pilotName || key,
           pilot_id: pilotId || '—',
-          phone: s.phone || '—',
-          city: s.city || '—',
+          phone: (s.phone && s.phone !== '—') ? s.phone : '—',
+          city: (s.city && s.city !== '—') ? s.city : '—',
           stores: new Set(),
           shifts: []
         };
       }
       if (s.store) pilotMap[key].stores.add(s.store);
+      if (pilotMap[key].city === '—' && s.city && s.city !== '—') pilotMap[key].city = s.city;
+      if (pilotMap[key].phone === '—' && s.phone && s.phone !== '—') pilotMap[key].phone = s.phone;
+      if (pilotMap[key].pilot_id === '—' && pilotId && pilotId !== '—') pilotMap[key].pilot_id = pilotId;
       pilotMap[key].shifts.push(s);
     });
 
@@ -903,13 +979,31 @@ const RankingFlotaCriticaEngine = {
 
     Object.values(pilotMap).forEach(p => {
       const totalShifts = p.shifts.length;
-      // Regla de Volumen Mínimo: al menos 2 turnos programados en el periodo filtrado
+      // Regla de Volumen Mínimo: al menos 1 turno programado en el periodo filtrado
       if (totalShifts < this.MIN_SHIFTS_REQUIRED) return;
 
-      // Conteo de cancelaciones
+      // Conteo de cancelaciones atribuibles al piloto (excluyendo Tienda Cerrada, Adicional no autorizado, Cliente cancela, etc.)
       const cancels = p.shifts.filter(s => {
         const rawSt = (s.status || '').toLowerCase().trim();
-        return Boolean(s.pilot_cancel || rawSt === 'piloto cancela' || rawSt === 'cancela');
+        const isExcluded = (
+          rawSt.includes('tienda cerrada') ||
+          rawSt === 'cerrada' ||
+          rawSt.includes('adicional no autoriz') ||
+          rawSt.includes('no autorizado') ||
+          rawSt.includes('cliente cancela') ||
+          rawSt.includes('cancela cliente') ||
+          rawSt.includes('adicional cancel') ||
+          rawSt.includes('no programado')
+        );
+        if (isExcluded) return false;
+        return Boolean(
+          s.pilot_cancel ||
+          rawSt === 'piloto cancela' ||
+          rawSt === 'cancela piloto' ||
+          rawSt === 'piloto canceló' ||
+          rawSt === 'piloto cancelo' ||
+          (rawSt.includes('piloto') && rawSt.includes('cancel'))
+        );
       }).length;
 
       // Turnos asistidos y paquetes
@@ -933,8 +1027,23 @@ const RankingFlotaCriticaEngine = {
         prodPct = 0;
       }
 
-      // % Impacto de Cancelación
-      const cancelImpactPct = totalShifts > 0 ? (cancels / totalShifts) * 100 : 0;
+      // % Impacto de Cancelación: calculado sobre el universo evaluable (excluyendo cliente cancela, tienda cerrada y adicional no autorizado)
+      const evaluableShifts = p.shifts.filter(s => {
+        const rawSt = (s.status || '').toLowerCase().trim();
+        const isExcluded = (
+          rawSt.includes('tienda cerrada') ||
+          rawSt === 'cerrada' ||
+          rawSt.includes('adicional no autoriz') ||
+          rawSt.includes('no autorizado') ||
+          rawSt.includes('cliente cancela') ||
+          rawSt.includes('cancela cliente') ||
+          rawSt.includes('adicional cancel') ||
+          rawSt.includes('no programado')
+        );
+        return !isExcluded;
+      });
+      const evaluableCount = evaluableShifts.length > 0 ? evaluableShifts.length : totalShifts;
+      const cancelImpactPct = evaluableCount > 0 ? (cancels / evaluableCount) * 100 : 0;
 
       // Score Combinado de Riesgo (0 a 100):
       // Mayor cancelación + Menor productividad = Mayor score de riesgo
@@ -1003,13 +1112,14 @@ const RankingFlotaCriticaEngine = {
   },
 
   /**
-   * Componente 2: Escalafón Global Top 10 con Más Cancelaciones
+   * Componente 2: Escalafón Global de la Flota (Ranking Total de la Flota)
+   * Ranking consolidado de toda la flota evaluada (mínimo 1 turno),
+   * priorizando cancelaciones recurrentes y desempate por menor productividad.
    */
   getGlobalTop10Cancels(shifts) {
     const summary = this.getPilotsSummary(shifts);
-    const withCancels = summary.filter(p => p.cancels > 0);
-    withCancels.sort((a, b) => this.sortPilotsCritical(a, b));
-    return withCancels.slice(0, 10);
+    summary.sort((a, b) => this.sortPilotsCritical(a, b));
+    return summary;
   },
 
   /**
@@ -1045,24 +1155,43 @@ const RankingFlotaCriticaEngine = {
       if (!storeMap[storeName]) {
         storeMap[storeName] = {
           store: storeName,
-          city: s.city || '—',
+          city: (s.city && s.city !== '—') ? s.city : '',
           totalShifts: 0,
           cancels: 0,
           attended: 0,
           replacements: 0
         };
+      } else if (!storeMap[storeName].city && s.city && s.city !== '—') {
+        storeMap[storeName].city = s.city;
       }
       storeMap[storeName].totalShifts++;
       const rawSt = (s.status || '').toLowerCase().trim();
-      const isCancel = Boolean(s.pilot_cancel || rawSt === 'piloto cancela' || rawSt === 'cancela');
+      const isExcluded = (
+        rawSt.includes('tienda cerrada') ||
+        rawSt === 'cerrada' ||
+        rawSt.includes('adicional no autoriz') ||
+        rawSt.includes('no autorizado') ||
+        rawSt.includes('cliente cancela') ||
+        rawSt.includes('cancela cliente') ||
+        rawSt.includes('adicional cancel') ||
+        rawSt.includes('no programado')
+      );
+      const isCancel = !isExcluded && Boolean(
+        s.pilot_cancel ||
+        rawSt === 'piloto cancela' ||
+        rawSt === 'cancela piloto' ||
+        rawSt === 'piloto canceló' ||
+        rawSt === 'piloto cancelo' ||
+        (rawSt.includes('piloto') && rawSt.includes('cancel'))
+      );
       if (isCancel) storeMap[storeName].cancels++;
       if (s.attended) storeMap[storeName].attended++;
       if (rawSt === 'reemplazo') storeMap[storeName].replacements++;
     });
 
     // Enriquecer con cálculo de match (cubiertos con reemplazo vs sin reemplazo)
-    if (typeof MatchEngine !== 'undefined') {
-      const match = MatchEngine.calculateTurnoMatch(shifts);
+    if (typeof reconcileShiftsMatch === 'function') {
+      const match = reconcileShiftsMatch(shifts);
       if (match && match.groups) {
         Object.values(match.groups).forEach(g => {
           const st = g.store || 'Sin Tienda';
@@ -1080,6 +1209,7 @@ const RankingFlotaCriticaEngine = {
       const cancelRatePct = st.totalShifts > 0 ? (st.cancels / st.totalShifts) * 100 : 0;
       return {
         ...st,
+        city: st.city || '—',
         matchedCancels: st.matchedCancels || 0,
         unmatchedCancels: st.unmatchedCancels || 0,
         cancelRatePct: +cancelRatePct.toFixed(1)

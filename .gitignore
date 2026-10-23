@@ -1,0 +1,16 @@
+# Python scratch and test scripts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+diagnose*.py
+test_*.py
+audit_tests.py
+find_sheets.py
+analyze_gids.py
+
+# System and logs
+*.log
+.DS_Store
+Thumbs.db

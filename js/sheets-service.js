@@ -242,14 +242,31 @@ const SheetsService = {
   async syncAll(onProgress) {
     if (onProgress) onProgress('Conectando con Google Sheets en tiempo real...', 10);
 
+    // 0. Fetch Hoja de Metas de Productividad (GID=723253237) para asegurar metas actualizadas (ej. Bello)
+    try {
+      if (onProgress) onProgress('Descargando Metas de Productividad (PROM. PAQ en tiempo real)...', 15);
+      const respProd = await fetch(this.sheetProductividadUrl);
+      if (respProd.ok) {
+        const csvProd = await respProd.text();
+        const parsedProd = this.parseCSV(csvProd);
+        const dynamicTargets = this.processProductivityTargets(parsedProd);
+        if (dynamicTargets && dynamicTargets.length > 0) {
+          PRODUCTIVITY_TARGETS = dynamicTargets;
+          console.log(`[SheetsService] Metas de productividad sincronizadas en vivo: ${dynamicTargets.length} reglas.`);
+        }
+      }
+    } catch (e) {
+      console.warn('[SheetsService] Error descargando metas en vivo, usando matriz base:', e);
+    }
+
     // 1. Fetch Sheet 1: Resto de Ciudades (GID=0) y Cali Actualizada (GID=62616103)
-    if (onProgress) onProgress('Descargando Hoja 1: Resto de Ciudades (Bogotá, Medellín, Bucaramanga, etc.)...', 20);
+    if (onProgress) onProgress('Descargando Hoja 1: Resto de Ciudades (Bogotá, Medellín, Bucaramanga, etc.)...', 25);
     const respResto = await fetch(this.sheet1RestoUrl);
     if (!respResto.ok) throw new Error(`Error ${respResto.status} conectando con Resto de Ciudades`);
     const csvResto = await respResto.text();
     const parsedResto = this.parseCSV(csvResto);
 
-    if (onProgress) onProgress('Descargando Hoja 1: Cali (pestaña actualizada con últimos meses)...', 40);
+    if (onProgress) onProgress('Descargando Hoja 1: Cali (pestaña actualizada con últimos meses)...', 45);
     const respCali = await fetch(this.sheet1CaliUrl);
     if (!respCali.ok) throw new Error(`Error ${respCali.status} conectando con Hoja Cali`);
     const csvCali = await respCali.text();
@@ -269,28 +286,34 @@ const SheetsService = {
     const progShifts = this.processProgramacionData(parsed2);
 
     // Consolidar Malla: Cali actualizada (con Septiembre) + Resto de ciudades sin perder histórico
-    const mallaMap = new Map();
+    const mallaShifts = [];
+    const caliUniqueKeys = new Set();
+
     // 1. Priorizar registros de Cali desde su pestaña dedicada (GID=62616103)
-    shiftsCali.forEach(s => {
+    shiftsCali.forEach((s) => {
       s.city = s.city || 'Cali';
-      const key = `cali|${(s.store || '').toLowerCase()}|${s.date}|${s.start}|${(s.pilot_id || s.pilot || '').toLowerCase()}`;
-      mallaMap.set(key, s);
-    });
-    // 2. Incorporar las demás ciudades desde la pestaña Resto de Ciudades (GID=0)
-    shiftsResto.forEach(s => {
-      const isCali = (s.city || '').toLowerCase() === 'cali';
-      if (isCali) {
-        const key = `cali|${(s.store || '').toLowerCase()}|${s.date}|${s.start}|${(s.pilot_id || s.pilot || '').toLowerCase()}`;
-        if (!mallaMap.has(key)) {
-          mallaMap.set(key, s);
-        }
-      } else {
-        const key = `${(s.city || '').toLowerCase()}|${(s.store || '').toLowerCase()}|${s.date}|${s.start}|${(s.pilot_id || s.pilot || '').toLowerCase()}`;
-        mallaMap.set(key, s);
-      }
+      const pKey = (s.pilot_id || s.pilot || '').toLowerCase().trim();
+      const stKey = (s.status || '').toLowerCase().trim();
+      const key = `cali|${(s.store || '').toLowerCase()}|${s.date}|${s.start}|${pKey}|${stKey}`;
+      caliUniqueKeys.add(key);
+      mallaShifts.push(s);
     });
 
-    const mallaShifts = Array.from(mallaMap.values());
+    // 2. Incorporar las demás ciudades desde la pestaña Resto de Ciudades (GID=0) sin sobreescribir turnos
+    shiftsResto.forEach((s) => {
+      const isCali = (s.city || '').toLowerCase() === 'cali';
+      if (isCali) {
+        const pKey = (s.pilot_id || s.pilot || '').toLowerCase().trim();
+        const stKey = (s.status || '').toLowerCase().trim();
+        const key = `cali|${(s.store || '').toLowerCase()}|${s.date}|${s.start}|${pKey}|${stKey}`;
+        if (!caliUniqueKeys.has(key)) {
+          caliUniqueKeys.add(key);
+          mallaShifts.push(s);
+        }
+      } else {
+        mallaShifts.push(s);
+      }
+    });
     console.log(`[SheetsService] Malla fusionada: ${mallaShifts.length} turnos (Cali pestaña dedicada: ${shiftsCali.length}) | Prog total: ${progShifts.length} turnos`);
 
     const mallaCities = new Set(mallaShifts.map(s => s.city).filter(Boolean));
@@ -395,7 +418,9 @@ const SheetsService = {
         pilot_cancel: classification.pilotCancel,
         excluded: classification.excluded,
         evaluable: classification.evaluable,
-        punctual: (startMin != null && arrivalMin != null) ? arrivalMin <= startMin : null,
+        punctual: (startMin != null && arrivalMin != null)
+          ? (typeof isShiftPunctualWithGabela === 'function' ? isShiftPunctualWithGabela(startMin, arrivalMin) : arrivalMin <= startMin)
+          : null,
         sla35: sla,
         target_productivity: prodTarget,
         productivity_eval: evalProd,
@@ -478,5 +503,39 @@ const SheetsService = {
     }
 
     return progShifts;
+  },
+
+  /**
+   * Procesa la matriz CSV de Productividad (GID 723253237)
+   */
+  processProductivityTargets(csvRows) {
+    if (!csvRows || csvRows.length < 2) return null;
+    const headers = csvRows[0].map(h => h.trim().toUpperCase());
+    const colPunto = headers.findIndex(h => h.includes('PUNTO') || h.includes('SELLER') || h.includes('TIENDA'));
+    const colDia = headers.findIndex(h => h.includes('DÍA') || h.includes('DIA') || (h.startsWith('D') && h.includes('A') && h.length <= 5));
+    const colInicio = headers.findIndex(h => h.includes('INICIO'));
+    const colPaq = headers.findIndex(h => h.includes('PAQ') || h.includes('PROM'));
+    if (colPunto === -1 || colDia === -1 || colInicio === -1 || colPaq === -1) return null;
+
+    const targets = [];
+    for (let i = 1; i < csvRows.length; i++) {
+      const r = csvRows[i];
+      const store = String(r[colPunto] || '').trim();
+      const dia = String(r[colDia] || '').trim();
+      const inicio = String(r[colInicio] || '').trim();
+      const paq = parseFloat(r[colPaq]);
+      if (!store || !dia || !inicio || isNaN(paq)) continue;
+
+      const startMin = this.timeToMinutes(inicio);
+      const startFrac = startMin != null ? String(startMin / 1440) : null;
+      targets.push({
+        store,
+        weekday: dia,
+        start_fraction: startFrac,
+        start_minutes: startMin,
+        target_packages: paq
+      });
+    }
+    return targets;
   }
 };
