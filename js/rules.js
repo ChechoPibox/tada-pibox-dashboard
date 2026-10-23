@@ -893,19 +893,55 @@ function calculateModulo1Kpis(shifts, config = (typeof APP_CONFIG !== 'undefined
     }
   });
 
-  const cat1Pct = validAssistanceShiftsTotal > 0 ? (cat1Shifts / validAssistanceShiftsTotal) * 100 : 0;
-  const cat2Pct = validAssistanceShiftsTotal > 0 ? (cat2Shifts / validAssistanceShiftsTotal) * 100 : 0;
-  const cat3Pct = validAssistanceShiftsTotal > 0 ? (cat3Shifts / validAssistanceShiftsTotal) * 100 : 0;
   const totalClassifiedPilots = cat1Pilots + cat2Pilots + cat3Pilots;
   const avgShiftsPerPilot = totalClassifiedPilots > 0 ? (validAssistanceShiftsTotal / totalClassifiedPilots) : 0;
+
+  // Cálculo dinámico de porcentajes sobre el total de pilotos clasificados (100%)
+  // Garantiza que la suma de los porcentajes sea exactamente 100% mediante ajuste de residuos
+  let cat1PilotsPct = 0;
+  let cat2PilotsPct = 0;
+  let cat3PilotsPct = 0;
+
+  if (totalClassifiedPilots > 0) {
+    let p1 = Math.round((cat1Pilots / totalClassifiedPilots) * 100);
+    let p2 = Math.round((cat2Pilots / totalClassifiedPilots) * 100);
+    let p3 = Math.round((cat3Pilots / totalClassifiedPilots) * 100);
+    const sum = p1 + p2 + p3;
+    const diff = 100 - sum;
+    if (diff !== 0) {
+      const remainders = [
+        { key: 'p1', r: (cat1Pilots / totalClassifiedPilots) * 100 - Math.floor((cat1Pilots / totalClassifiedPilots) * 100) },
+        { key: 'p2', r: (cat2Pilots / totalClassifiedPilots) * 100 - Math.floor((cat2Pilots / totalClassifiedPilots) * 100) },
+        { key: 'p3', r: (cat3Pilots / totalClassifiedPilots) * 100 - Math.floor((cat3Pilots / totalClassifiedPilots) * 100) }
+      ];
+      if (diff > 0) {
+        remainders.sort((a, b) => b.r - a.r);
+        if (remainders[0].key === 'p1') p1 += diff;
+        else if (remainders[0].key === 'p2') p2 += diff;
+        else p3 += diff;
+      } else {
+        remainders.sort((a, b) => a.r - b.r);
+        if (remainders[0].key === 'p1') p1 += diff;
+        else if (remainders[0].key === 'p2') p2 += diff;
+        else p3 += diff;
+      }
+    }
+    cat1PilotsPct = p1;
+    cat2PilotsPct = p2;
+    cat3PilotsPct = p3;
+  }
+
+  const cat1ShiftsPct = validAssistanceShiftsTotal > 0 ? (cat1Shifts / validAssistanceShiftsTotal) * 100 : 0;
+  const cat2ShiftsPct = validAssistanceShiftsTotal > 0 ? (cat2Shifts / validAssistanceShiftsTotal) * 100 : 0;
+  const cat3ShiftsPct = validAssistanceShiftsTotal > 0 ? (cat3Shifts / validAssistanceShiftsTotal) * 100 : 0;
 
   const asistenciaProgDistribution = {
     totalValidShifts: validAssistanceShiftsTotal,
     totalPilots: totalClassifiedPilots,
     avgShiftsPerPilot,
-    cat1Pilots, cat1Shifts, cat1Pct,
-    cat2Pilots, cat2Shifts, cat2Pct,
-    cat3Pilots, cat3Shifts, cat3Pct
+    cat1Pilots, cat1Shifts, cat1Pct: cat1PilotsPct, cat1PilotsPct, cat1ShiftsPct,
+    cat2Pilots, cat2Shifts, cat2Pct: cat2PilotsPct, cat2PilotsPct, cat2ShiftsPct,
+    cat3Pilots, cat3Shifts, cat3Pct: cat3PilotsPct, cat3PilotsPct, cat3ShiftsPct
   };
 
   return {
