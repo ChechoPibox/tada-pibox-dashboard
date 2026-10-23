@@ -1495,13 +1495,13 @@ function renderKpis() {
       isHero: true,
       heroTag: 'Meta Operativa',
       value: fmtPct(kpis.cuposCoveragePct),
-      sub: `${kpis.cuposCoveredCount} cupos cubiertos de ${kpis.cuposEvaluatedCount} requeridos (demanda base)`,
+      sub: `${fmtNum(kpis.cuposCoveredCount, 0)} numerador ÷ ${fmtNum(kpis.cuposEvaluatedCount, 0)} denominador`,
       icon: '🎯',
       colorClass: covColor,
       target: 'Meta: ≥95%',
       targetClass: covPct >= 95 ? 'target-good' : (covPct >= 85 ? 'target-warn' : 'target-bad'),
-      progressPct: Math.min(100, Math.max(0, covPct)),
-      tooltip: 'Total de cupos de despacho cubiertos frente a la demanda base programada para los puntos de venta.'
+      progressPct: Math.min(100, Math.max(0, covPct > 100 ? 100 : covPct)),
+      tooltip: 'Cobertura de Cupos (%) = (Suma estados numerador [Confirmados, Reemplazo, Adic TaDa, Adic autorizados, Piloto Cancela, Cliente Cancela, Adic Cancela, Tienda cerrada] ÷ Suma estados denominador [Confirmados, Reemplazo, Adic TaDa, Adic autorizados, Tienda cerrada]) × 100. Adicional no autorizado completamente excluido.'
     },
     {
       label: '4. Cupos Faltantes (Vacantes)',

@@ -597,6 +597,21 @@ function calculateModulo1Kpis(shifts, config = (typeof APP_CONFIG !== 'undefined
       cuposCoveragePct: null,
       cuposCoveredCount: 0,
       cuposEvaluatedCount: 0,
+      cuposNumeratorCount: 0,
+      cuposDenominatorCount: 0,
+      cuposBreakdown: {
+        confirmados: 0,
+        reemplazo: 0,
+        adicionalTaDa: 0,
+        adicionalAutorizados: 0,
+        tiendaCerrada: 0,
+        pilotoCancela: 0,
+        clienteCancela: 0,
+        adicionalCancela: 0,
+        adicionalNoAutorizado: 0,
+        numerador: 0,
+        denominador: 0
+      },
       cuposExcludedCount: 0,
       cuposFaltantesTotal: 0,
       cuposFaltantesBreakdown: { unmatchedCancels: 0, noProgramado: 0, sinPiloto: 0, matchedReplacements: 0, rawCancels: 0 },
@@ -621,6 +636,20 @@ function calculateModulo1Kpis(shifts, config = (typeof APP_CONFIG !== 'undefined
   let penalizedAdicionalCancela = 0;
   let penalizedNoProgramado = 0;
   let penalizedEmpty = 0;
+
+  // 3. COBERTURA DE CUPOS (Fórmula oficial definida por estados para Tarjeta 3)
+  // Numerador (8 estados): Confirmados, Reemplazo, Adicional TaDa, Adicional autorizados, Piloto Cancela, Cliente Cancela, Adicional Cancela, Tienda cerrada
+  // Denominador (5 estados): Confirmados, Reemplazo, Adicional TaDa, Adicional autorizados, Tienda cerrada
+  // Regla importante: "Adicional no autorizado" excluido completamente de numerador y denominador
+  let cuposConfirmados = 0;
+  let cuposReemplazo = 0;
+  let cuposAdicionalTaDa = 0;
+  let cuposAdicionalAutorizados = 0;
+  let cuposTiendaCerrada = 0;
+  let cuposPilotoCancela = 0;
+  let cuposClienteCancela = 0;
+  let cuposAdicionalCancela = 0;
+  let cuposAdicionalNoAutorizado = 0;
 
   // 5. PUNTUALIDAD CON GABELA
   let punctualityEvaluatedCount = 0;
@@ -647,6 +676,76 @@ function calculateModulo1Kpis(shifts, config = (typeof APP_CONFIG !== 'undefined
       penalizedNoProgramado++;
     } else if (!rawSt) {
       penalizedEmpty++;
+    }
+
+    // Clasificación oficial para Cobertura de Cupos (Tarjeta 3)
+    const isAdicNoAutorizado = (
+      st.includes('adicional no autoriz') ||
+      st.includes('no autorizado') ||
+      st.includes('no autoriz')
+    );
+
+    if (isAdicNoAutorizado) {
+      cuposAdicionalNoAutorizado++;
+    } else {
+      const isConf = (st === 'confirmado' || st === 'confirmados' || st === 'hibrido' || st === 'híbrido');
+      const isReemp = (st === 'reemplazo' || st === 'reemplazos');
+      const isAdicAut = (
+        st === 'adicional autorizado' ||
+        st === 'adicional autorizados' ||
+        st === 'adicional autorizada' ||
+        st === 'adicional autorizadas' ||
+        (st.includes('adicional') && st.includes('autoriz'))
+      );
+      const isAdicCanc = (
+        st === 'adicional cancela' ||
+        st === 'adicional cancelado' ||
+        st === 'adicional cancelada' ||
+        (st.includes('adicional') && st.includes('cancel'))
+      );
+      const isAdicTaDa = !isAdicAut && !isAdicCanc && (
+        st === 'adicional tada' ||
+        st === 'adicional ta da' ||
+        (st.includes('adicional') && st.includes('tada')) ||
+        st === 'adicional'
+      );
+      const isTiendaCerr = (
+        st.includes('tienda cerrada') ||
+        st === 'cerrada' ||
+        st === 'tienda cerrada'
+      );
+      const isPilotoCanc = !isAdicCanc && (
+        st === 'piloto cancela' ||
+        st === 'cancela piloto' ||
+        st === 'piloto canceló' ||
+        st === 'piloto cancelo' ||
+        (st.includes('piloto') && st.includes('cancel'))
+      );
+      const isClienteCanc = !isAdicCanc && (
+        st === 'cliente cancela' ||
+        st === 'cancela cliente' ||
+        st === 'cliente canceló' ||
+        st === 'cliente cancelo' ||
+        (st.includes('cliente') && st.includes('cancel'))
+      );
+
+      if (isConf) {
+        cuposConfirmados++;
+      } else if (isReemp) {
+        cuposReemplazo++;
+      } else if (isAdicAut) {
+        cuposAdicionalAutorizados++;
+      } else if (isAdicCanc) {
+        cuposAdicionalCancela++;
+      } else if (isAdicTaDa) {
+        cuposAdicionalTaDa++;
+      } else if (isTiendaCerr) {
+        cuposTiendaCerrada++;
+      } else if (isPilotoCanc) {
+        cuposPilotoCancela++;
+      } else if (isClienteCanc) {
+        cuposClienteCancela++;
+      }
     }
 
     // Puntualidad con Gabela
@@ -697,11 +796,13 @@ function calculateModulo1Kpis(shifts, config = (typeof APP_CONFIG !== 'undefined
   const cancellationRatePct = totalBaseDenominator > 0 ? (totalOperativeCancels / totalBaseDenominator) * 100 : 0;
   const cancellationNetRatePct = totalBaseDenominator > 0 ? (matchResult.totalUnmatchedCancels / totalBaseDenominator) * 100 : 0;
 
-  // ── COBERTURA DE CUPOS (Fórmula oficial validada) ─────────────────────────────────────────
-  const cuposTurnRequeridos  = Math.max(1, matchResult.totalSlotsRequired);    // demanda base del match
-  const cuposCoveredNumerator = matchResult.totalSlotsCovered;                  // turnos efectivamente cubiertos
-  const cuposMallaBase        = cuposTurnRequeridos;                            // denominador = demanda base
-  const cuposCoveragePctNew   = (cuposCoveredNumerator / cuposMallaBase) * 100;
+  // ── COBERTURA DE CUPOS (Fórmula oficial ajustada de Tarjeta 3) ─────────────────────────
+  // Numerador (8 estados): Confirmados + Reemplazo + Adicional TaDa + Adicional autorizados + Piloto Cancela + Cliente Cancela + Adicional Cancela + Tienda cerrada
+  // Denominador (5 estados): Confirmados + Reemplazo + Adicional TaDa + Adicional autorizados + Tienda cerrada
+  // Regla importante: "Adicional no autorizado" excluido completamente tanto del numerador como del denominador.
+  const cuposDenominador = cuposConfirmados + cuposReemplazo + cuposAdicionalTaDa + cuposAdicionalAutorizados + cuposTiendaCerrada;
+  const cuposNumerador = cuposDenominador + cuposPilotoCancela + cuposClienteCancela + cuposAdicionalCancela;
+  const cuposCoveragePctCalculated = cuposDenominador > 0 ? (cuposNumerador / cuposDenominador) * 100 : null;
 
   const punctualityPct = punctualityEvaluatedCount > 0
     ? (punctualCount / punctualityEvaluatedCount) * 100
@@ -744,9 +845,24 @@ function calculateModulo1Kpis(shifts, config = (typeof APP_CONFIG !== 'undefined
       unmatchedPilotCancels: matchResult.totalUnmatchedPilotCancels || 0,
       unmatchedClientCancels: matchResult.totalUnmatchedClientCancels || 0
     },
-    cuposCoveragePct: cuposCoveragePctNew,            // (Requeridos + Reemplazos) / Requeridos × 100
-    cuposCoveredCount: cuposCoveredNumerator,          // Requeridos + Reemplazos (numerador)
-    cuposEvaluatedCount: cuposMallaBase,               // Turnos Requeridos (denominador = demanda base)
+    cuposCoveragePct: cuposCoveragePctCalculated,
+    cuposCoveredCount: cuposNumerador,
+    cuposEvaluatedCount: cuposDenominador,
+    cuposNumeratorCount: cuposNumerador,
+    cuposDenominatorCount: cuposDenominador,
+    cuposBreakdown: {
+      confirmados: cuposConfirmados,
+      reemplazo: cuposReemplazo,
+      adicionalTaDa: cuposAdicionalTaDa,
+      adicionalAutorizados: cuposAdicionalAutorizados,
+      tiendaCerrada: cuposTiendaCerrada,
+      pilotoCancela: cuposPilotoCancela,
+      clienteCancela: cuposClienteCancela,
+      adicionalCancela: cuposAdicionalCancela,
+      adicionalNoAutorizado: cuposAdicionalNoAutorizado,
+      numerador: cuposNumerador,
+      denominador: cuposDenominador
+    },
     cuposExcludedCount: matchResult.totalExcluded,
     cuposFaltantesTotal: matchResult.totalSlotsMissing,
     cuposFaltantesBreakdown: {
