@@ -625,6 +625,14 @@ function calculateModulo1Kpis(shifts, config = (typeof APP_CONFIG !== 'undefined
       fleetProductivityPaqH: 0,
       packagesRealSum: 0,
       packagesCancSum: 0,
+      asistenciaProgDistribution: {
+        totalValidShifts: 0,
+        totalPilots: 0,
+        avgShiftsPerPilot: 0,
+        cat1Pilots: 0, cat1Shifts: 0, cat1Pct: 0,
+        cat2Pilots: 0, cat2Shifts: 0, cat2Pct: 0,
+        cat3Pilots: 0, cat3Shifts: 0, cat3Pct: 0
+      },
       avgAttendanceScale7: 0,
       avgAttendancePct: 0
     };
@@ -669,6 +677,12 @@ function calculateModulo1Kpis(shifts, config = (typeof APP_CONFIG !== 'undefined
   let totalPaquetesEntregados = 0;
   let totalPaquetesReal = 0;
   let totalPaquetesCanc = 0;
+
+  // 9. CLASIFICACIÓN DE PILOTOS POR PROGRAMACIÓN SEMANAL (Tarjeta 9)
+  // Estados válidos exclusivos: Confirmado, Reemplazo, Adicional TaDa, Adicional autorizado
+  // Cada piloto clasificado una sola vez por cantidad de turnos válidos en el período
+  const pilotValidAssistanceShiftsMap = new Map();
+  let validAssistanceShiftsTotal = 0;
 
   shifts.forEach(s => {
     const rawSt = String(s.status || '').trim();
@@ -765,6 +779,12 @@ function calculateModulo1Kpis(shifts, config = (typeof APP_CONFIG !== 'undefined
         totalPaquetesReal += pkgsReal;
         totalPaquetesCanc += pkgsCanc;
         totalPaquetesEntregados += (pkgsReal + pkgsCanc);
+
+        // ── Tarjeta 9: Agrupación de turnos válidos por piloto único ──
+        validAssistanceShiftsTotal++;
+        if (pilotKey) {
+          pilotValidAssistanceShiftsMap.set(pilotKey, (pilotValidAssistanceShiftsMap.get(pilotKey) || 0) + 1);
+        }
       }
     }
 
@@ -854,6 +874,39 @@ function calculateModulo1Kpis(shifts, config = (typeof APP_CONFIG !== 'undefined
   const avgFleetAttendance = activePilotsCount > 0 ? (sumPilotRates / activePilotsCount) : 0;
   const avgAttendanceScale7 = avgFleetAttendance * 7;
 
+  // ── 9. CLASIFICACIÓN DE PILOTOS POR PROGRAMACIÓN SEMANAL (Tarjeta 9) ───────────────────
+  let cat1Pilots = 0, cat1Shifts = 0;
+  let cat2Pilots = 0, cat2Shifts = 0;
+  let cat3Pilots = 0, cat3Shifts = 0;
+
+  pilotValidAssistanceShiftsMap.forEach((count) => {
+    if (count >= 1 && count <= 2) {
+      cat1Pilots++;
+      cat1Shifts += count;
+    } else if (count >= 3 && count <= 4) {
+      cat2Pilots++;
+      cat2Shifts += count;
+    } else if (count >= 5) {
+      cat3Pilots++;
+      cat3Shifts += count;
+    }
+  });
+
+  const cat1Pct = validAssistanceShiftsTotal > 0 ? (cat1Shifts / validAssistanceShiftsTotal) * 100 : 0;
+  const cat2Pct = validAssistanceShiftsTotal > 0 ? (cat2Shifts / validAssistanceShiftsTotal) * 100 : 0;
+  const cat3Pct = validAssistanceShiftsTotal > 0 ? (cat3Shifts / validAssistanceShiftsTotal) * 100 : 0;
+  const totalClassifiedPilots = cat1Pilots + cat2Pilots + cat3Pilots;
+  const avgShiftsPerPilot = totalClassifiedPilots > 0 ? (validAssistanceShiftsTotal / totalClassifiedPilots) : 0;
+
+  const asistenciaProgDistribution = {
+    totalValidShifts: validAssistanceShiftsTotal,
+    totalPilots: totalClassifiedPilots,
+    avgShiftsPerPilot,
+    cat1Pilots, cat1Shifts, cat1Pct,
+    cat2Pilots, cat2Shifts, cat2Pct,
+    cat3Pilots, cat3Shifts, cat3Pct
+  };
+
   return {
     asistenciaEffectivenessPct: matchResult.cuposCoveragePct,
     asistenciaCoveredCount: matchResult.totalSlotsCovered,
@@ -916,6 +969,7 @@ function calculateModulo1Kpis(shifts, config = (typeof APP_CONFIG !== 'undefined
     fleetProductivityPaqH,
     packagesRealSum: totalPaquetesReal,
     packagesCancSum: totalPaquetesCanc,
+    asistenciaProgDistribution,
     avgAttendanceScale7,
     avgAttendancePct: avgFleetAttendance * 100
   };

@@ -1560,17 +1560,55 @@ function renderKpis() {
       progressPct: Math.min(100, Math.max(0, (kpis.fleetProductivityPaqH / 1.5) * 100)),
       tooltip: 'Productividad de la Flota = Volumen total de paquetería (Paquetería + Cancelados) ÷ Horas gestionadas (turnos válidos × 8h). Meta oficial: ≥1.5 paq/h evaluada exclusivamente sobre Confirmados, Reemplazo, Adicional TaDa y Adicional autorizados.'
     },
-    {
-      label: '9. Promedio de Asistencia',
-      value: `${kpis.avgAttendanceScale7.toFixed(2)} / 7 días`,
-      sub: `Tasa proyectada semanal por cada 7 turnos (${kpis.avgAttendancePct.toFixed(1)}% flota)`,
-      icon: '📊',
-      colorClass: attScaleColor,
-      target: 'Escala 7 Días',
-      targetClass: kpis.avgAttendanceScale7 >= 6.5 ? 'target-good' : (kpis.avgAttendanceScale7 >= 5.5 ? 'target-warn' : 'target-bad'),
-      progressPct: Math.min(100, Math.max(0, (kpis.avgAttendanceScale7 / 7) * 100)),
-      tooltip: 'Proyección semanal normalizada del cumplimiento de asistencia de la flota por cada ciclo de 7 días.'
-    }
+    (() => {
+      const dist = kpis.asistenciaProgDistribution || {
+        totalValidShifts: 0,
+        totalPilots: 0,
+        avgShiftsPerPilot: 0,
+        cat1Pilots: 0, cat1Shifts: 0, cat1Pct: 0,
+        cat2Pilots: 0, cat2Shifts: 0, cat2Pct: 0,
+        cat3Pilots: 0, cat3Shifts: 0, cat3Pct: 0
+      };
+
+      const highPct = dist.cat3Pct || 0;
+      const progCardColor = highPct >= 40 ? 'kpi-emerald' : (highPct >= 20 ? 'kpi-amber' : 'kpi-rose');
+
+      return {
+        label: '9. Promedio de Asistencia',
+        isHero: true,
+        heroTag: 'Programación Semanal',
+        value: `${fmtNum(dist.totalPilots, 0)} pilotos`,
+        target: `Meta: 5-7 turnos (${dist.cat3Pct.toFixed(1)}% turnos)`,
+        targetClass: highPct >= 40 ? 'target-good' : (highPct >= 20 ? 'target-warn' : 'target-bad'),
+        icon: '📊',
+        colorClass: progCardColor,
+        customProgressBar: `
+          <div class="kpi-progress-bar" style="display:flex;height:6px;border-radius:3px;overflow:hidden;background:rgba(255,255,255,0.08);gap:1px;" title="Verde: 5-7 turnos (${dist.cat3Pct.toFixed(1)}%) | Amarillo: 3-4 turnos (${dist.cat2Pct.toFixed(1)}%) | Azul: 1-2 turnos (${dist.cat1Pct.toFixed(1)}%)">
+            <div style="width:${dist.cat3Pct.toFixed(1)}%;background:#10b981;"></div>
+            <div style="width:${dist.cat2Pct.toFixed(1)}%;background:#f59e0b;"></div>
+            <div style="width:${dist.cat1Pct.toFixed(1)}%;background:#60a5fa;"></div>
+          </div>
+        `,
+        progressPct: Math.min(100, Math.max(0, highPct)),
+        sub: `
+          <div style="display:flex;flex-direction:column;gap:5px;font-size:0.74rem;margin-top:6px;border-top:1px solid rgba(255,255,255,0.08);padding-top:6px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <span style="color:#d4d8f0;">🟢 <strong>5 a 7 turnos (Alta):</strong> ${fmtNum(dist.cat3Pilots, 0)} pilotos</span>
+              <span style="font-weight:700;color:#10b981;">${dist.cat3Pct.toFixed(1)}% <span style="font-size:0.68rem;color:var(--text-dim);font-weight:normal;">(${dist.cat3Shifts} t)</span></span>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <span style="color:#d4d8f0;">🟡 <strong>3 a 4 turnos (Media):</strong> ${fmtNum(dist.cat2Pilots, 0)} pilotos</span>
+              <span style="font-weight:700;color:#f59e0b;">${dist.cat2Pct.toFixed(1)}% <span style="font-size:0.68rem;color:var(--text-dim);font-weight:normal;">(${dist.cat2Shifts} t)</span></span>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <span style="color:#d4d8f0;">🔵 <strong>1 a 2 turnos (Baja):</strong> ${fmtNum(dist.cat1Pilots, 0)} pilotos</span>
+              <span style="font-weight:700;color:#60a5fa;">${dist.cat1Pct.toFixed(1)}% <span style="font-size:0.68rem;color:var(--text-dim);font-weight:normal;">(${dist.cat1Shifts} t)</span></span>
+            </div>
+          </div>
+        `,
+        tooltip: 'Distribución de pilotos por programación semanal calculada exclusivamente sobre Confirmados, Reemplazo, Adicional TaDa y Adicional autorizados. Pilotos: únicos por categoría; Porcentajes: calculados sobre el total de turnos de los cuatro estados válidos (' + fmtNum(dist.totalValidShifts, 0) + ' turnos).'
+      };
+    })()
   ];
 
   container.innerHTML = cards.map(c => `
@@ -1589,9 +1627,10 @@ function renderKpis() {
       <div class="kpi-target-row">
         <span class="kpi-target-tag ${c.targetClass}">${c.target}</span>
       </div>
+      ${c.customProgressBar || `
       <div class="kpi-progress-bar">
         <div class="kpi-progress-fill" style="width: ${c.progressPct.toFixed(1)}%;"></div>
-      </div>
+      </div>`}
       <div class="kpi-sub">${c.sub}</div>
     </div>
   `).join('');
