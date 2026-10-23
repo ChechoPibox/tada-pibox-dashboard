@@ -619,9 +619,12 @@ function calculateModulo1Kpis(shifts, config = (typeof APP_CONFIG !== 'undefined
       punctualCount: 0,
       punctualityEvaluatedCount: 0,
       activePilotsCount: 0,
+      validManagedShiftsCount: 0,
       totalPackages: 0,
       totalManagedHours: 0,
       fleetProductivityPaqH: 0,
+      packagesRealSum: 0,
+      packagesCancSum: 0,
       avgAttendanceScale7: 0,
       avgAttendancePct: 0
     };
@@ -658,8 +661,14 @@ function calculateModulo1Kpis(shifts, config = (typeof APP_CONFIG !== 'undefined
   // 6. PILOTOS ACTIVOS (Únicos por ID o nombre)
   const uniquePilotsMap = new Map();
 
-  // 7. PAQUETES ENTREGADOS
+  // 7 & 8. PAQUETES ENTREGADOS, HORAS GESTIONADAS Y PRODUCTIVIDAD DE FLOTA
+  // Sumar Paquetería y Cancelados exclusivamente de los 4 estados válidos:
+  // Confirmados, Reemplazo, Adicional TaDa, Adicional autorizados
+  // Horas gestionadas = Total de turnos válidos × 8 horas
+  let validManagedShiftsCount = 0;
   let totalPaquetesEntregados = 0;
+  let totalPaquetesReal = 0;
+  let totalPaquetesCanc = 0;
 
   shifts.forEach(s => {
     const rawSt = String(s.status || '').trim();
@@ -746,6 +755,17 @@ function calculateModulo1Kpis(shifts, config = (typeof APP_CONFIG !== 'undefined
       } else if (isClienteCanc) {
         cuposClienteCancela++;
       }
+
+      // ── Tarjetas 7 y 8: Conteo exclusivo sobre los 4 estados válidos ──
+      const isManagedProductiveShift = (isConf || isReemp || isAdicAut || isAdicTaDa);
+      if (isManagedProductiveShift) {
+        validManagedShiftsCount++;
+        const pkgsReal = Number(s.packages) || Number(s.paquetes) || 0;
+        const pkgsCanc = Number(s.packages_cancelled) || Number(s.cancelled_packages) || Number(s.cancelled) || 0;
+        totalPaquetesReal += pkgsReal;
+        totalPaquetesCanc += pkgsCanc;
+        totalPaquetesEntregados += (pkgsReal + pkgsCanc);
+      }
     }
 
     // Puntualidad con Gabela
@@ -794,10 +814,6 @@ function calculateModulo1Kpis(shifts, config = (typeof APP_CONFIG !== 'undefined
       }
     }
 
-    // Paquetes
-    const pkgsReal = Number(s.packages) || 0;
-    const pkgsCanc = Number(s.packages_cancelled) || 0;
-    totalPaquetesEntregados += (pkgsReal + pkgsCanc);
   });
 
   // Denominador para tasas de cancelación (sobre el universo de turnos requeridos del match)
@@ -820,7 +836,11 @@ function calculateModulo1Kpis(shifts, config = (typeof APP_CONFIG !== 'undefined
 
   const activePilotsCount = uniquePilotsMap.size;
 
-  const totalManagedHours = (matchResult.totalSlotsCovered > 0 ? matchResult.totalSlotsCovered : totalBaseDenominator) * 8;
+  // ── HORAS GESTIONADAS Y PRODUCTIVIDAD DE FLOTA (Tarjetas 7 y 8) ─────────────────────────
+  // Horas gestionadas = Total de turnos válidos (los 4 estados) × 8 horas
+  // Productividad Flota = Volumen total de paquetería ÷ Horas gestionadas
+  // Meta oficial conservada: ≥1.5 paq/h
+  const totalManagedHours = validManagedShiftsCount * 8;
   const fleetProductivityPaqH = totalManagedHours > 0
     ? (totalPaquetesEntregados / totalManagedHours)
     : 0;
@@ -890,9 +910,12 @@ function calculateModulo1Kpis(shifts, config = (typeof APP_CONFIG !== 'undefined
     punctualCount,
     punctualityEvaluatedCount,
     activePilotsCount,
+    validManagedShiftsCount,
     totalPackages: totalPaquetesEntregados,
     totalManagedHours,
     fleetProductivityPaqH,
+    packagesRealSum: totalPaquetesReal,
+    packagesCancSum: totalPaquetesCanc,
     avgAttendanceScale7,
     avgAttendancePct: avgFleetAttendance * 100
   };

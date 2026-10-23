@@ -413,6 +413,8 @@ const SheetsService = {
         arrival: arrivalMin,
         packages,
         cancelled_packages: cancelled,
+        packages_cancelled: cancelled,
+        cancelled: cancelled,
         hours: classification.attended ? 8 : 0,
         attended: classification.attended,
         pilot_cancel: classification.pilotCancel,

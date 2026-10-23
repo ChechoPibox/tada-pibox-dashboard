@@ -1539,26 +1539,26 @@ function renderKpis() {
     {
       label: '7. Paquetes Entregados',
       value: fmtNum(kpis.totalPackages, 0),
-      sub: `Horas gestionadas: ${fmtNum(AppState.filteredMalla.length, 0)} turnos × 8h = ${fmtNum(kpis.totalManagedHours, 0)}h`,
+      sub: `Horas gestionadas: ${fmtNum(kpis.validManagedShiftsCount, 0)} turnos × 8h = ${fmtNum(kpis.totalManagedHours, 0)}h`,
       icon: '📦',
       colorClass: 'kpi-purple',
-      target: 'Volumen Total',
-      targetClass: 'target-info',
-      progressPct: 100,
-      tooltip: 'Total de entregas exitosas realizadas en los turnos gestionados filtrados.'
+      target: 'Meta: ≥1.5 paq/h',
+      targetClass: kpis.fleetProductivityPaqH >= 1.5 ? 'target-good' : (kpis.fleetProductivityPaqH >= 1.2 ? 'target-warn' : 'target-bad'),
+      progressPct: Math.min(100, Math.max(0, (kpis.fleetProductivityPaqH / 1.5) * 100)),
+      tooltip: 'Suma de Paquetes y Cancelados exclusivamente de turnos válidos (Confirmados, Reemplazo, Adicional TaDa y Adicional autorizados). Horas gestionadas = Total de turnos válidos × 8 horas.'
     },
     {
       label: '8. Productividad Flota',
       isHero: true,
       heroTag: 'Eficiencia Flota',
       value: `${kpis.fleetProductivityPaqH.toFixed(2)} paq/h`,
-      sub: `${fmtNum(kpis.totalPackages, 0)} paquetes / ${fmtNum(kpis.totalManagedHours, 0)} Horas gestionadas`,
+      sub: `${fmtNum(kpis.totalPackages, 0)} paquetes / ${fmtNum(kpis.totalManagedHours, 0)} horas (${fmtNum(kpis.validManagedShiftsCount, 0)} turnos válidos × 8h)`,
       icon: '⚡',
-      colorClass: 'kpi-emerald',
-      target: 'Meta: >2.0 paq/h',
-      targetClass: kpis.fleetProductivityPaqH >= 2.0 ? 'target-good' : (kpis.fleetProductivityPaqH >= 1.5 ? 'target-warn' : 'target-bad'),
-      progressPct: Math.min(100, Math.max(0, (kpis.fleetProductivityPaqH / 3.0) * 100)),
-      tooltip: 'Promedio de entregas por hora trabajada de la flota (Paquetes / Horas gestionadas).'
+      colorClass: kpis.fleetProductivityPaqH >= 1.5 ? 'kpi-emerald' : (kpis.fleetProductivityPaqH >= 1.2 ? 'kpi-amber' : 'kpi-rose'),
+      target: 'Meta: ≥1.5 paq/h',
+      targetClass: kpis.fleetProductivityPaqH >= 1.5 ? 'target-good' : (kpis.fleetProductivityPaqH >= 1.2 ? 'target-warn' : 'target-bad'),
+      progressPct: Math.min(100, Math.max(0, (kpis.fleetProductivityPaqH / 1.5) * 100)),
+      tooltip: 'Productividad de la Flota = Volumen total de paquetería (Paquetería + Cancelados) ÷ Horas gestionadas (turnos válidos × 8h). Meta oficial: ≥1.5 paq/h evaluada exclusivamente sobre Confirmados, Reemplazo, Adicional TaDa y Adicional autorizados.'
     },
     {
       label: '9. Promedio de Asistencia',
