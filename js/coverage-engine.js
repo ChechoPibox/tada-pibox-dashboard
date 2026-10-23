@@ -100,7 +100,6 @@ const CoverageEngine = {
         rawSt === 'cerrada' ||
         rawSt.includes('adicional no autoriz') ||
         rawSt.includes('no autorizado') ||
-        rawSt.includes('cliente cancela') ||
         rawSt.includes('adicional cancel') ||
         rawSt.includes('no programado')
       );
@@ -112,31 +111,45 @@ const CoverageEngine = {
         rawSt === 'piloto cancelo' ||
         (rawSt.includes('piloto') && rawSt.includes('cancel'))
       );
+      const isClientCancel = !isExcluded && Boolean(
+        rawSt === 'cliente cancela' ||
+        rawSt === 'cancela cliente' ||
+        rawSt === 'cliente canceló' ||
+        rawSt === 'cliente cancelo' ||
+        (rawSt.includes('cliente') && rawSt.includes('cancel'))
+      );
       const isReplacement = (rawSt === 'reemplazo');
-      if (isPilotCancel) {
-        slotGroups[key].cancels.push(s);
+      if (isPilotCancel || isClientCancel) {
+        slotGroups[key].cancels.push({
+          shift: s,
+          isClient: isClientCancel
+        });
       } else if (isReplacement) {
         slotGroups[key].replacements.push(s);
       }
     });
 
-    // Mapeo 1 a 1 entre turnos cancelados y sus reemplazos efectivamente confirmados
+    // Mapeo 1 a 1 entre turnos cancelados (Piloto o Cliente) y sus reemplazos efectivamente confirmados
     const matchedCancelMap = new Map();
     Object.values(slotGroups).forEach(g => {
       const minCount = Math.min(g.cancels.length, g.replacements.length);
       for (let i = 0; i < g.cancels.length; i++) {
-        const cancelShift = g.cancels[i];
+        const item = g.cancels[i];
+        const cancelShift = item.shift;
+        const isClient = item.isClient;
         if (i < minCount) {
           // Reemplazo confirmado asociado
           matchedCancelMap.set(cancelShift, {
             hasReplacement: true,
-            replacementShift: g.replacements[i]
+            replacementShift: g.replacements[i],
+            isClient
           });
         } else {
           // Sin reemplazo confirmado
           matchedCancelMap.set(cancelShift, {
             hasReplacement: false,
-            replacementShift: null
+            replacementShift: null,
+            isClient
           });
         }
       }
@@ -168,9 +181,12 @@ const CoverageEngine = {
     return progShifts.map(s => {
       const rawSt = (s.status || '').toLowerCase().trim();
 
-      // Caso A: Turno cancelado por el piloto
+      // Caso A: Turno cancelado por el piloto o por el cliente
       if (matchedCancelMap.has(s)) {
         const matchInfo = matchedCancelMap.get(s);
+        const originLabel = matchInfo.isClient ? 'Cliente' : 'Piloto';
+        const cancelEntity = matchInfo.isClient ? 'cliente' : 'el piloto';
+
         if (matchInfo.hasReplacement) {
           const repPilot = matchInfo.replacementShift?.pilot || 'Suplente Asignado';
           return {
@@ -179,9 +195,9 @@ const CoverageEngine = {
             replacementPilot: repPilot,
             risk: {
               level: 'cancel_with_replacement',
-              label: '🔄 Cancelado con Reemplazo',
+              label: `🔄 ${originLabel} cancela (Con Reemplazo)`,
               badgeClass: 'pill-neutral',
-              description: `Turno cancelado por el piloto. Reemplazo confirmado asignado: ${repPilot}.`,
+              description: `Turno con cancelación por ${cancelEntity}. Reemplazo confirmado asignado: ${repPilot}.`,
               cancelRate: null,
               cancelCount: 0
             }
@@ -194,9 +210,9 @@ const CoverageEngine = {
             isUnmatchedCancel: true,
             risk: {
               level: 'cancel_unmatched',
-              label: '🚨 Piloto cancelado sin reemplazo',
+              label: `🚨 ${originLabel} cancela sin reemplazo`,
               badgeClass: 'badge-riesgo-alto',
-              description: 'Turno cancelado por el piloto sin reemplazo confirmado. Situación pendiente de gestión.',
+              description: `Turno con cancelación por ${cancelEntity} sin reemplazo confirmado en la franja horaria. Requiere asignación de suplente.`,
               cancelRate: null,
               cancelCount: 0
             }

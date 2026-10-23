@@ -122,18 +122,37 @@ function classifyShiftStatus(rawStatus) {
     };
   }
 
+  // Estado Cliente Cancela:
+  // Para la Ficha individual del Piloto no se penaliza su score personal,
+  // pero porta la marca clientCancel: true para la conciliación operativa transversal de la Tarjeta 2 y Módulo 2.
+  if (
+    s === 'cliente cancela' ||
+    s === 'cancela cliente' ||
+    s === 'cliente canceló' ||
+    s === 'cliente cancelo' ||
+    (s.includes('cliente') && s.includes('cancel'))
+  ) {
+    return {
+      status: rawStatus,
+      evaluable: false,
+      attended: false,
+      pilotCancel: false,
+      clientCancel: true,
+      excluded: false,
+      category: 'CLIENTE_CANCELA'
+    };
+  }
+
   // Estados excluidos expresos según normativa operativa:
   // - Tienda cerrada (establecimiento sin operación)
   // - Adicional no autorizado (turno extra sin autorización)
-  // - Cliente cancela / Adicional cancelado / No programado
+  // - Adicional cancelado / No programado
   // No penalizan la asistencia, no afectan cancelaciones del piloto ni perjudican su score.
   if (
     s.includes('tienda cerrada') ||
     s === 'cerrada' ||
     s.includes('adicional no autoriz') ||
     s.includes('no autorizado') ||
-    s.includes('cliente cancela') ||
-    s.includes('cancela cliente') ||
     s.includes('adicional cancel') ||
     s.includes('no programado')
   ) {
@@ -142,6 +161,7 @@ function classifyShiftStatus(rawStatus) {
       evaluable: false,
       attended: false,
       pilotCancel: false,
+      clientCancel: false,
       excluded: true,
       category: 'EXCLUIDO'
     };
@@ -390,6 +410,8 @@ function reconcileShiftsMatch(shifts) {
         store: rawStore,
         startMin,
         shifts: [],
+        pilotCancels: 0,
+        clientCancels: 0,
         cancels: 0,
         reemplazos: 0,
         activeConfirmed: 0,
@@ -408,41 +430,53 @@ function reconcileShiftsMatch(shifts) {
       st === 'piloto cancela' ||
       st === 'cancela piloto' ||
       st === 'piloto canceló' ||
-      st === 'piloto cancelo'
+      st === 'piloto cancelo' ||
+      (st.includes('piloto') && st.includes('cancel'))
     );
 
-    // 2. Reemplazo (cubre un cancelado o turno vacante)
+    // 2. Cliente Cancela (debe tener match con reemplazo para no generar vacante en la operación)
+    const isClientCancel = (
+      st === 'cliente cancela' ||
+      st === 'cancela cliente' ||
+      st === 'cliente canceló' ||
+      st === 'cliente cancelo' ||
+      (st.includes('cliente') && st.includes('cancel'))
+    );
+
+    // 3. Reemplazo (cubre un cancelado o turno vacante)
     const isReplacement = (st === 'reemplazo');
 
-    // 3. Exclusiones: estados que NO entran en el balance de cobertura ni efectividad.
+    // 4. Exclusiones: estados que NO entran en el balance de cobertura ni efectividad.
     //    - Tienda Cerrada: no hay operación, no se puede medir.
-    //    - Cliente Cancela: causa externa, no responsabilidad del piloto ni de la operación.
+    //    - Adicional No Autorizado: turno extra no autorizado.
     //    - Adicional Autorizado: turno extra autorizado puntualmente, no es un cupo de la malla base.
-    //    - Adicional Cancela / Adicional Cancelado: cancelación de un adicional, no aplica a la malla.
+    //    - Adicional Cancela / Adicional Cancelado: cancelación de un adicional, no aplica a la malla base.
     const isExcluded = (
       st.includes('tienda cerrada') ||
       st === 'cerrada' ||
       st.includes('adicional no autoriz') ||
       st.includes('no autorizado') ||
-      st === 'cliente cancela' ||
-      st === 'cancela cliente' ||
       st === 'adicional autorizado' ||
       st === 'adicional cancela' ||
       st === 'adicional cancelado'
     );
 
-    // 4. No Programado
+    // 5. No Programado
     const isNoProgramado = (st === 'no programado');
 
-    // 5. Cupo sin piloto
+    // 6. Cupo sin piloto
     const hasPilot = Boolean(
       (s.pilot && String(s.pilot).trim() !== '' && String(s.pilot).trim() !== '—') ||
       (s.pilot_id && String(s.pilot_id).trim() !== '' && String(s.pilot_id).trim() !== '—') ||
       (s.phone && String(s.phone).trim() !== '' && String(s.phone).trim() !== '—')
     );
-    const isSinPiloto = (!rawSt || (!hasPilot && !isPilotCancel && !isReplacement && !isExcluded && !isNoProgramado));
+    const isSinPiloto = (!rawSt || (!hasPilot && !isPilotCancel && !isClientCancel && !isReplacement && !isExcluded && !isNoProgramado));
 
     if (isPilotCancel) {
+      groups[key].pilotCancels++;
+      groups[key].cancels++;
+    } else if (isClientCancel) {
+      groups[key].clientCancels++;
       groups[key].cancels++;
     } else if (isReplacement) {
       groups[key].reemplazos++;
@@ -465,12 +499,20 @@ function reconcileShiftsMatch(shifts) {
   let totalReplacements = 0;
   let totalMatchedReplacements = 0;
   let totalRawCancels = 0;
+  let totalPilotCancels = 0;
+  let totalClientCancels = 0;
+  let totalMatchedPilotCancels = 0;
+  let totalMatchedClientCancels = 0;
+  let totalUnmatchedPilotCancels = 0;
+  let totalUnmatchedClientCancels = 0;
   let totalNoProgramado = 0;
   let totalSinPiloto = 0;
   let totalExcluded = 0;
 
   Object.values(groups).forEach(g => {
     totalRawCancels += g.cancels;
+    totalPilotCancels += (g.pilotCancels || 0);
+    totalClientCancels += (g.clientCancels || 0);
     totalReplacements += g.reemplazos;
     totalNoProgramado += g.noProgramado;
     totalSinPiloto += g.sinPiloto;
@@ -481,6 +523,17 @@ function reconcileShiftsMatch(shifts) {
 
     totalMatchedReplacements += matched;
     totalUnmatchedCancels += unmatched;
+
+    // Distribuir el match entre cancelaciones de piloto y de cliente
+    let rem = g.reemplazos;
+    const mPilot = Math.min(g.pilotCancels || 0, rem);
+    rem -= mPilot;
+    const mClient = Math.min(g.clientCancels || 0, rem);
+
+    totalMatchedPilotCancels += mPilot;
+    totalMatchedClientCancels += mClient;
+    totalUnmatchedPilotCancels += ((g.pilotCancels || 0) - mPilot);
+    totalUnmatchedClientCancels += ((g.clientCancels || 0) - mClient);
 
     // Turnos cubiertos en este grupo horario:
     // Activos normales + todos los reemplazos (que cubren cancelados o slots requeridos)
@@ -511,6 +564,12 @@ function reconcileShiftsMatch(shifts) {
     totalReplacements,
     totalMatchedReplacements,
     totalRawCancels,
+    totalPilotCancels,
+    totalClientCancels,
+    totalMatchedPilotCancels,
+    totalMatchedClientCancels,
+    totalUnmatchedPilotCancels,
+    totalUnmatchedClientCancels,
     totalNoProgramado,
     totalSinPiloto,
     totalExcluded,
@@ -556,8 +615,9 @@ function calculateModulo1Kpis(shifts, config = (typeof APP_CONFIG !== 'undefined
   // 1. REGLA TRANSVERSAL DE MATCH & EFECTIVIDAD DE ASISTENCIA / COBERTURA
   const matchResult = reconcileShiftsMatch(shifts);
 
-  // 2. TASA DE CANCELACIÓN
+  // 2. TASA DE CANCELACIÓN (Validación de Piloto Cancela + Cliente Cancela con Match de Reemplazo)
   let penalizedPilotCancel = 0;
+  let penalizedClientCancel = 0;
   let penalizedAdicionalCancela = 0;
   let penalizedNoProgramado = 0;
   let penalizedEmpty = 0;
@@ -576,9 +636,11 @@ function calculateModulo1Kpis(shifts, config = (typeof APP_CONFIG !== 'undefined
     const rawSt = String(s.status || '').trim();
     const st = rawSt.toLowerCase();
 
-    // Penalizados brutos
-    if (st === 'piloto cancela' || st === 'cancela piloto' || st === 'piloto canceló' || st === 'piloto cancelo') {
+    // Conteo de eventos de cancelación operativa
+    if (st === 'piloto cancela' || st === 'cancela piloto' || st === 'piloto canceló' || st === 'piloto cancelo' || (st.includes('piloto') && st.includes('cancel'))) {
       penalizedPilotCancel++;
+    } else if (st === 'cliente cancela' || st === 'cancela cliente' || st === 'cliente canceló' || st === 'cliente cancelo' || (st.includes('cliente') && st.includes('cancel'))) {
+      penalizedClientCancel++;
     } else if (st === 'adicional cancela' || st === 'adicional cancelado') {
       penalizedAdicionalCancela++;
     } else if (st === 'no programado') {
@@ -607,9 +669,6 @@ function calculateModulo1Kpis(shifts, config = (typeof APP_CONFIG !== 'undefined
       const pEntry = uniquePilotsMap.get(pilotId);
       pEntry.total++;
 
-      // Turnos en los que el piloto asistió físicamente (para Pilotos Activos y Promedio Asistencia).
-      // Nota: 'adicional autorizado' y 'tienda cerrada' se excluyen del balance de cobertura/efectividad
-      // (gestionado en reconcileShiftsMatch), pero el piloto sí asistió, así que sigue contando aquí.
       const isAttended = (
         st === 'confirmado' ||
         st === 'reemplazo' ||
@@ -632,14 +691,13 @@ function calculateModulo1Kpis(shifts, config = (typeof APP_CONFIG !== 'undefined
     totalPaquetesEntregados += (pkgsReal + pkgsCanc);
   });
 
-  // Denominador para tasas de cancelación (sobre el universo de turnos activos del match)
+  // Denominador para tasas de cancelación (sobre el universo de turnos requeridos del match)
   const totalBaseDenominator = matchResult.totalSlotsRequired > 0 ? matchResult.totalSlotsRequired : totalFiltered;
-  const cancellationRatePct = (penalizedPilotCancel / totalBaseDenominator) * 100;
-  const cancellationNetRatePct = (matchResult.totalUnmatchedCancels / totalBaseDenominator) * 100;
+  const totalOperativeCancels = penalizedPilotCancel + penalizedClientCancel;
+  const cancellationRatePct = totalBaseDenominator > 0 ? (totalOperativeCancels / totalBaseDenominator) * 100 : 0;
+  const cancellationNetRatePct = totalBaseDenominator > 0 ? (matchResult.totalUnmatchedCancels / totalBaseDenominator) * 100 : 0;
 
   // ── COBERTURA DE CUPOS (Fórmula oficial validada) ─────────────────────────────────────────
-  // Cobertura real de cupos: Total de turnos cubiertos (activos + reemplazos requeridos)
-  // respecto a los turnos requeridos por la operación (demanda base).
   const cuposTurnRequeridos  = Math.max(1, matchResult.totalSlotsRequired);    // demanda base del match
   const cuposCoveredNumerator = matchResult.totalSlotsCovered;                  // turnos efectivamente cubiertos
   const cuposMallaBase        = cuposTurnRequeridos;                            // denominador = demanda base
@@ -671,14 +729,20 @@ function calculateModulo1Kpis(shifts, config = (typeof APP_CONFIG !== 'undefined
     asistenciaRequiredCount: matchResult.totalSlotsRequired,
     cancellationRatePct,
     cancellationNetRatePct,
-    penalizedCount: penalizedPilotCancel + penalizedAdicionalCancela + penalizedNoProgramado,
+    penalizedCount: totalOperativeCancels + penalizedAdicionalCancela + penalizedNoProgramado,
     penalizedBreakdown: {
       pilotCancel: penalizedPilotCancel,
+      clientCancel: penalizedClientCancel,
+      totalCancels: totalOperativeCancels,
       adicionalCancela: penalizedAdicionalCancela,
       noProgramado: penalizedNoProgramado,
       emptyStatus: penalizedEmpty,
       matchedReplacements: matchResult.totalMatchedReplacements,
-      unmatchedCancels: matchResult.totalUnmatchedCancels
+      unmatchedCancels: matchResult.totalUnmatchedCancels,
+      matchedPilotCancels: matchResult.totalMatchedPilotCancels || 0,
+      matchedClientCancels: matchResult.totalMatchedClientCancels || 0,
+      unmatchedPilotCancels: matchResult.totalUnmatchedPilotCancels || 0,
+      unmatchedClientCancels: matchResult.totalUnmatchedClientCancels || 0
     },
     cuposCoveragePct: cuposCoveragePctNew,            // (Requeridos + Reemplazos) / Requeridos × 100
     cuposCoveredCount: cuposCoveredNumerator,          // Requeridos + Reemplazos (numerador)
@@ -687,10 +751,14 @@ function calculateModulo1Kpis(shifts, config = (typeof APP_CONFIG !== 'undefined
     cuposFaltantesTotal: matchResult.totalSlotsMissing,
     cuposFaltantesBreakdown: {
       unmatchedCancels: matchResult.totalUnmatchedCancels,
+      unmatchedPilotCancels: matchResult.totalUnmatchedPilotCancels || 0,
+      unmatchedClientCancels: matchResult.totalUnmatchedClientCancels || 0,
       noProgramado: matchResult.totalNoProgramado,
       sinPiloto: matchResult.totalSinPiloto,
       matchedReplacements: matchResult.totalMatchedReplacements,
-      rawCancels: matchResult.totalRawCancels
+      rawCancels: matchResult.totalRawCancels,
+      pilotCancels: matchResult.totalPilotCancels || 0,
+      clientCancels: matchResult.totalClientCancels || 0
     },
     punctualityPct,
     punctualCount,

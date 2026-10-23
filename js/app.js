@@ -1471,13 +1471,24 @@ function renderKpis() {
     {
       label: '2. Tasa de Cancelación',
       value: fmtPct(kpis.cancellationRatePct),
-      sub: `${kpis.cuposFaltantesBreakdown.rawCancels ?? kpis.penalizedBreakdown.pilotCancel} cancelados (${kpis.cuposFaltantesBreakdown.matchedReplacements || 0} cubiertos con reemplazo · ${kpis.cuposFaltantesBreakdown.unmatchedCancels || 0} sin reemplazo)`,
+      sub: (() => {
+        const raw = kpis.cuposFaltantesBreakdown?.rawCancels ?? kpis.penalizedBreakdown?.totalCancels ?? kpis.penalizedBreakdown?.pilotCancel ?? 0;
+        const matched = kpis.cuposFaltantesBreakdown?.matchedReplacements || 0;
+        const unmatched = kpis.cuposFaltantesBreakdown?.unmatchedCancels || 0;
+        const pCancels = kpis.cuposFaltantesBreakdown?.pilotCancels ?? kpis.penalizedBreakdown?.pilotCancel ?? 0;
+        const cCancels = kpis.cuposFaltantesBreakdown?.clientCancels ?? kpis.penalizedBreakdown?.clientCancel ?? 0;
+
+        if (cCancels > 0) {
+          return `${raw} cancelados (${pCancels} piloto, ${cCancels} cliente · ${matched} cubiertos · ${unmatched} sin reemplazo)`;
+        }
+        return `${raw} cancelados (${matched} cubiertos con reemplazo · ${unmatched} sin reemplazo)`;
+      })(),
       icon: '🚫',
       colorClass: canColor,
       target: `Tolerancia: ≤${APP_CONFIG.cancellationGreen || 5}%`,
       targetClass: canPct <= (APP_CONFIG.cancellationGreen || 5) ? 'target-good' : (canPct <= 10 ? 'target-warn' : 'target-bad'),
       progressPct: Math.min(100, Math.max(0, 100 - (canPct * 5))),
-      tooltip: 'Porcentaje de turnos cancelados sobre los turnos programados requeridos. Las cancelaciones con suplente cubierto no generan vacante pero cuentan como evento de indisponibilidad.'
+      tooltip: 'Porcentaje de turnos cancelados (Piloto Cancela + Cliente Cancela) sobre turnos requeridos. Valida transversalmente que todo registro de cancelación tenga su correspondiente match con reemplazo en la misma fecha, tienda y horario.'
     },
     {
       label: '3. Cobertura de Cupos',
