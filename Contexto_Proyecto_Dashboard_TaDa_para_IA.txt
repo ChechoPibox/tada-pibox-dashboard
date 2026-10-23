@@ -1,0 +1,158 @@
+================================================================================
+          PROYECTO MAESTRO: DASHBOARD OPERATIVO Y ANALÍTICO TADA / PIBOX
+               DOCUMENTO DE CONTEXTO TÉCNICO Y REGLAS DE NEGOCIO
+================================================================================
+Fecha de Consolidación: Septiembre 2026
+Objetivo del Documento: Proporcionar la arquitectura, reglas de negocio, lógica 
+temporal, estructura de datos y diseño de interfaz para la construcción completa 
+del Dashboard Operativo SPA en HTML/CSS/JS.
+
+--------------------------------------------------------------------------------
+1. OBJETIVO GENERAL Y VISIÓN DEL PROYECTO
+--------------------------------------------------------------------------------
+Construir una solución operativa integral en tiempo real para TaDa/PIBOX que 
+elimine la carga manual semanal de archivos, supere las limitaciones de memoria
+del navegador (localStorage de 5MB) mediante IndexedDB y Fetch API directo a Google
+Sheets, y resuelva la pregunta operativa central:
+
+"¿Cómo está funcionando la flota en tiempo real y qué pilotos son confiables para 
+volver a programar?"
+
+Pilares Principales:
+1. Automatización Operativa: Conexión dinámica a fuentes de datos.
+2. Visibilidad y Analítica: Medición de productividad ajustada por demanda, 
+   asistencia, puntualidad y tasa de cancelación.
+3. Planificación Preventiva: Monitoreo de cupos vacantes y alertas de riesgo 
+   para suplentes antes de que ocurra una cancelación.
+4. Contexto Temporal Dinámico: Análisis en tiempo real del mes actual más 
+   dos meses de antigüedad (ventana rodante de 3 meses).
+
+--------------------------------------------------------------------------------
+2. ARQUITECTURA TÉCNICA Y ESTRUCTURA DE ARCHIVOS
+--------------------------------------------------------------------------------
+El proyecto sigue una arquitectura Single Page Application (SPA) modular en 
+JavaScript puro (vanilla), HTML5 y CSS3, alojada bajo la siguiente estructura:
+
+tada-pibox-dashboard/
+├── index.html                  # Aplicación SPA con navegación por módulos y modales
+├── css/
+│   └── styles.css              # Sistema visual inspirado en comercial.picap.io (Violeta/Morado)
+├── js/
+│   ├── config.js               # Parámetros, umbrales y pesos del índice (localStorage)
+│   ├── storage-db.js           # Base de datos local IndexedDB (manejo de grandes volúmenes)
+│   ├── sheets-service.js       # Conector Fetch / GViz API con Google Sheets
+│   ├── rules.js                # Fórmulas oficiales de asistencia, puntualidad y scoring
+│   ├── productivity-matrix.js  # Matriz de metas históricas (PROM. PAQ) por punto/día/turno
+│   ├── coverage-engine.js      # Motor Módulo 2: Cupos vacantes, riesgo y pool de suplentes
+│   ├── charts.js               # Gráficos interactivos Chart.js (semana actual)
+│   ├── app.js                  # Controlador general, filtros reactivos, Ficha 360 y exportador
+│   └── vendor/
+│       ├── chart.umd.min.js    # Librería Chart.js local (100% offline)
+│       └── xlsx.full.min.js    # Librería SheetJS local para respaldo Excel
+└── assets/
+    └── logo_pibox_tada.jpg     # Branding oficial Pibox + TaDa
+
+--------------------------------------------------------------------------------
+3. FUENTES DE DATOS EN TIEMPO REAL (GOOGLE SHEETS)
+--------------------------------------------------------------------------------
+El sistema consume datos en tiempo real mediante los siguientes endpoints GViz API:
+
+HOJA 1: Malla de Datos TaDa (Historial y Ejecución):
+- ID: 1ukufIN9kWUAK5olBGvfs30UV5u-pgwPblKyQxWnwyfI | GID: 62616103
+- Endpoint CSV: https://docs.google.com/spreadsheets/d/1ukufIN9kWUAK5olBGvfs30UV5u-pgwPblKyQxWnwyfI/gviz/tq?tqx=out:csv&gid=62616103
+- Uso: Historial de asistencia, cancelaciones, puntualidad y paquetes reales.
+
+HOJA 2: Programación de Turnos (Malla Activa / Preventiva):
+- ID: 1a1-ZUpdz8B1JW8W0wLCPhpwNawnlPApLG6v5yKfsoeI | GID: 1638581759
+- Endpoint CSV: https://docs.google.com/spreadsheets/d/1a1-ZUpdz8B1JW8W0wLCPhpwNawnlPApLG6v5yKfsoeI/gviz/tq?tqx=out:csv&gid=1638581759
+- Uso: Monitoreo de cobertura, detección de cupos faltantes y cruce de riesgo.
+
+--------------------------------------------------------------------------------
+4. REGLAS DE NEGOCIO Y FÓRMULAS OFICIALES
+--------------------------------------------------------------------------------
+CLASIFICACIÓN DE ESTADOS DE ASISTENCIA:
+- Turnos Cumplidos (Suman a Asistencia): Confirmado, Reemplazo, Adicional, Adicional autorizado.
+- Turnos No Cumplidos (Penalizan Asistencia/Cancelación): Piloto Cancela.
+- Turnos Excluidos (REGLA CRÍTICA): Cliente cancela y Tienda Cerrada.
+  * NOTA: Estos dos estados NO se penalizan, NO son responsabilidad del piloto y 
+    quedan fuera del denominador de asistencia y cancelación.
+
+FÓRMULAS DE CÁLCULO:
+- Turnos Evaluables = (Cumplidos) + (Piloto Cancela)
+- % Efectividad de Asistencia = [ Cumplidos / Evaluables ] * 100
+- % Tasa de Cancelación = [ Piloto Cancela / Evaluables ] * 100
+- % Puntualidad = [ Turnos a tiempo (Hora Llegada <= Hora Inicio) / Turnos Asistidos ] * 100
+
+--------------------------------------------------------------------------------
+5. LÓGICA DE PRODUCTIVIDAD Y FACTOR DE DEMANDA
+--------------------------------------------------------------------------------
+MATCH EXACTO POR CLAVE COMPUESTA:
+La meta de cada turno se calcula haciendo un Match exacto entre la ejecución real y la 
+hoja PRODUCTIVIDAD utilizando la clave:
+Clave Compuesta = [ PUNTO + DÍA DE LA SEMANA + INICIO DE TURNO ]
+
+- Meta (Esperado): Valor de 'PROM. PAQ' para esa clave.
+- Real (Entregado): Paquetes efectados por el piloto.
+- % Cumplimiento de Productividad = [ Paquetes Reales / PROM. PAQ ] * 100
+
+SEMAFORIZACIÓN DE CUMPLIMIENTO:
+- 🟢 Verde (>= 90%): "Óptimo" - Alcanzó o superó la media esperada.
+- 🟡 Amarillo (75% - 89%): "Aceptable" - Margen tolerable.
+- 🔴 Rojo (< 75%): "Bajo Rendimiento" - Alerta de rendimiento.
+
+FACTOR CONTEXTUAL DE DEMANDA DE TIENDA:
+- Si la tienda tuvo una demanda global < 70% respecto al promedio histórico, el sistema 
+  activa la alerta visual "⚠️ Baja Demanda en Punto".
+- REGLA: No se debe alterar numéricamente la productividad del piloto, pero se protege 
+  su evaluación cualitativa indicando que el bajo rendimiento fue por causa externa (tienda).
+
+--------------------------------------------------------------------------------
+6. ÍNDICE DE CONFIABILIDAD PARA PROGRAMACIÓN (0 - 100)
+--------------------------------------------------------------------------------
+Ponderación de evaluación del piloto (Paramétrica / Configurable):
+- Productividad vs Meta: 35%
+- Asistencia Efectiva: 25%
+- Tasa de Cancelación: 20%
+- Puntualidad: 10%
+- Cumplimiento SLA 35: 10%
+
+Clasificación del Piloto (Badges):
+- 🟢 Alta Confiabilidad (Score >= 85): Apto para programar.
+- 🟡 Confiabilidad Media (Score 70 - 84): Programar con seguimiento.
+- 🔴 Baja Confiabilidad (Score < 70): Alto riesgo / Requiere suplente.
+
+--------------------------------------------------------------------------------
+7. MOTOR DE COBERTURA PREVENTIVA Y SUPLENTES (MÓDULO 2)
+--------------------------------------------------------------------------------
+REGLA DE CUPOS FALTANTES:
+- Toda fila en la Hoja de Programación (Sheet 2) que tenga asignado un PUNTO pero tenga 
+  vacíos los campos de Piloto, Teléfono e ID, se clasifica automáticamente como "Cupo Faltante".
+
+POOL DE REEMPLAZOS / SUPLENTES (3 Criterios de Selección):
+Cuando un turno tiene un cupo faltante o un piloto asignado con riesgo de cancelación (>10%), 
+el motor sugiere suplentes ordenados por:
+1. Frecuencia y cumplimiento histórico en la tienda específica.
+2. Historial de éxito en turnos con horario de inicio similar.
+3. Efectividad de asistencia registrada en ese día específico de la semana.
+
+--------------------------------------------------------------------------------
+8. DISEÑO DE INTERFAZ (UI/UX) Y REFERENCIA VISUAL
+--------------------------------------------------------------------------------
+- Estilo: Fiel reproducción de comercial.picap.io
+- Paleta de Colores: Dark Violet / Morado Premium, tipografía clara, tarjetas tipo glassmorphism.
+- Navegación por Módulos:
+  1. 🛵 Tráfico / Operación (KPIs globales, tablas Top 10 impuntuales, Top 10 cancelaciones, pilotos nuevos).
+  2. 🏙️ Por Ciudad (Comparativo por sedes: Bogotá, Medellín, Cali, Barranquilla, etc.).
+  3. ⚡ Productividad (Match de metas vs real con filtro de baja demanda).
+  4. 👤 Ficha de Piloto (Vista 360° individual, medidor radial, historial de turnos).
+  5. 📊 Insights & Gráficos (Visualizaciones dinámicas en Chart.js para la semana actual).
+  6. 📋 Detalle de Jornadas (Tabla con trazabilidad completa de registros).
+
+--------------------------------------------------------------------------------
+9. INSTRUCCIÓN FINAL PARA LA IA DE DESARROLLO
+--------------------------------------------------------------------------------
+Utiliza esta estructura técnica y reglas de negocio para generar o ajustar el código 
+en HTML, CSS y JavaScript puro. Asegúrate de mantener la modularidad, asegurar que los 
+filtros dinámicos reactiven todos los componentes gráficos/tablas, y validar que las 
+fórmulas cumplan estrictamente con las reglas de exclusión y semaforización definidas.
+================================================================================
