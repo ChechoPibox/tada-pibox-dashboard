@@ -931,12 +931,21 @@ html {
   text-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
 }
 
+/* Wide card (Tarjeta 9) overrides hero value font so custom HTML headline renders correctly */
+.kpi-card.kpi-card-wide.kpi-hero .kpi-value {
+  font-size: inherit;
+  font-weight: normal;
+  letter-spacing: normal;
+  text-shadow: none;
+  color: inherit;
+}
+
 /* ============================================================
-   TARJETA 9 (PROMEDIO DE ASISTENCIA) — TARJETA AMPLIADA
+   TARJETA 9 (PROMEDIO DE ASISTENCIA) — TARJETA AMPLIADA COEXISTENTE
    ============================================================ */
 .kpi-card.kpi-card-wide {
   grid-column: span 2;
-  min-width: 320px;
+  min-width: 340px;
 }
 
 @media (max-width: 768px) {
@@ -946,100 +955,166 @@ html {
   }
 }
 
-.asistencia-prog-grid {
+/* Encabezado dual de métricas principales */
+.asistencia-kpi-headline {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin: 6px 0 10px 0;
+}
+
+.asistencia-headline-metric {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.asistencia-headline-val {
+  font-size: 1.85rem;
+  font-weight: 900;
+  color: #ffffff;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.asistencia-headline-unit {
+  font-size: 0.80rem;
+  font-weight: 600;
+  color: var(--text-muted, #94a3b8);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.asistencia-headline-divider {
+  color: rgba(255, 255, 255, 0.25);
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.asistencia-headline-sub {
+  font-size: 0.78rem;
+  color: #cbd5e1;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 3px 9px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-weight: 500;
+}
+
+/* Contenedor de las dos visualizaciones simultáneas */
+.asistencia-dual-container {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
   margin-top: 10px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
-  padding-top: 10px;
+  padding-top: 12px;
 }
 
-.asistencia-prog-col {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: var(--radius-md, 8px);
-  padding: 8px 10px;
+@media (max-width: 720px) {
+  .asistencia-dual-container {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+}
+
+.asistencia-sub-panel {
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 10px 12px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  transition: background 0.2s, border-color 0.2s, transform 0.2s;
+  gap: 6px;
+  transition: background 0.2s, border-color 0.2s;
 }
 
-.asistencia-prog-col:hover {
-  background: rgba(255, 255, 255, 0.06);
-  transform: translateY(-1px);
+.asistencia-sub-panel:hover {
+  background: rgba(255, 255, 255, 0.045);
 }
 
-.asistencia-prog-col.col-baja { border-left: 3px solid #60a5fa; }
-.asistencia-prog-col.col-media { border-left: 3px solid #f59e0b; }
-.asistencia-prog-col.col-alta { border-left: 3px solid #10b981; }
+.asistencia-sub-panel.panel-pilots {
+  border-top: 3px solid #818cf8;
+}
 
-.asistencia-prog-col-header {
+.asistencia-sub-panel.panel-shifts {
+  border-top: 3px solid #34d399;
+}
+
+.asistencia-sub-panel-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 6px;
+}
+
+.sub-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.sub-panel-total {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #94a3b8;
+}
+
+.sub-panel-total strong {
+  color: #ffffff;
+}
+
+.dual-bar {
+  display: flex;
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.08);
+  gap: 1px;
+  margin: 3px 0 5px 0;
+}
+
+.asistencia-cat-rows {
+  display: flex;
+  flex-direction: column;
   gap: 4px;
 }
 
-.asistencia-range {
-  font-size: 0.74rem;
-  font-weight: 700;
-  color: #f1f5f9;
-}
-
-.asistencia-badge {
-  font-size: 0.65rem;
-  font-weight: 700;
-  padding: 1px 6px;
-  border-radius: 4px;
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
-}
-
-.badge-baja { background: rgba(96, 165, 250, 0.18); color: #93c5fd; }
-.badge-media { background: rgba(245, 158, 11, 0.18); color: #fcd34d; }
-.badge-alta { background: rgba(16, 185, 129, 0.18); color: #6ee7b7; }
-
-.asistencia-prog-numbers {
+.asistencia-cat-row {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
-  margin-top: 2px;
+  font-size: 0.72rem;
+  padding: 3px 0;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.05);
 }
 
-.asistencia-pilots-val {
-  font-size: 0.95rem;
-  font-weight: 700;
-  color: #ffffff;
+.asistencia-cat-row:last-child {
+  border-bottom: none;
 }
-.asistencia-pilots-val small {
-  font-size: 0.70rem;
-  font-weight: 400;
-  color: var(--text-dim, #94a3b8);
+
+.cat-label {
+  color: #cbd5e1;
+  font-weight: 500;
+}
+
+.cat-val {
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.cat-pct {
+  font-weight: 800;
   margin-left: 3px;
 }
 
-.asistencia-pct-val {
-  font-size: 1.05rem;
-  font-weight: 800;
-}
 .pct-baja { color: #60a5fa; }
 .pct-media { color: #f59e0b; }
 .pct-alta { color: #10b981; }
-
-.asistencia-shifts-val {
-  font-size: 0.68rem;
-  color: var(--text-dim, #94a3b8);
-  margin-top: 1px;
-}
-
-@media (max-width: 640px) {
-  .asistencia-prog-grid {
-    grid-template-columns: 1fr;
-    gap: 6px;
-  }
-}
 
 .kpi-label-wrap {
   display: flex;

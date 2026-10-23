@@ -1565,14 +1565,18 @@ function renderKpis() {
         totalValidShifts: 0,
         totalPilots: 0,
         avgShiftsPerPilot: 0,
-        cat1Pilots: 0, cat1Shifts: 0, cat1Pct: 0, cat1PilotsPct: 0,
-        cat2Pilots: 0, cat2Shifts: 0, cat2Pct: 0, cat2PilotsPct: 0,
-        cat3Pilots: 0, cat3Shifts: 0, cat3Pct: 0, cat3PilotsPct: 0
+        cat1Pilots: 0, cat1Shifts: 0, cat1Pct: 0, cat1PilotsPct: 0, cat1ShiftsPct: 0,
+        cat2Pilots: 0, cat2Shifts: 0, cat2Pct: 0, cat2PilotsPct: 0, cat2ShiftsPct: 0,
+        cat3Pilots: 0, cat3Shifts: 0, cat3Pct: 0, cat3PilotsPct: 0, cat3ShiftsPct: 0
       };
 
       const p1Pct = dist.cat1PilotsPct ?? dist.cat1Pct ?? 0;
       const p2Pct = dist.cat2PilotsPct ?? dist.cat2Pct ?? 0;
       const p3Pct = dist.cat3PilotsPct ?? dist.cat3Pct ?? 0;
+
+      const s1Pct = dist.cat1ShiftsPct ?? 0;
+      const s2Pct = dist.cat2ShiftsPct ?? 0;
+      const s3Pct = dist.cat3ShiftsPct ?? 0;
 
       const progCardColor = p3Pct >= 35 ? 'kpi-emerald' : (p3Pct >= 20 ? 'kpi-amber' : 'kpi-rose');
 
@@ -1581,62 +1585,104 @@ function renderKpis() {
         isHero: true,
         heroTag: 'Programación Semanal',
         isWide: true,
-        value: `${fmtNum(dist.totalPilots, 0)} pilotos`,
-        target: `Meta: 5-7 turnos (${p3Pct}% flota)`,
+        value: `
+          <div class="asistencia-kpi-headline">
+            <div class="asistencia-headline-metric" title="Total de pilotos únicos con turnos autorizados">
+              <span class="asistencia-headline-val">${fmtNum(dist.totalPilots, 0)}</span>
+              <span class="asistencia-headline-unit">pilotos</span>
+            </div>
+            <div class="asistencia-headline-divider">/</div>
+            <div class="asistencia-headline-metric" title="Total de turnos válidos autorizados gestionados">
+              <span class="asistencia-headline-val" style="color:#6ee7b7;">${fmtNum(dist.totalValidShifts, 0)}</span>
+              <span class="asistencia-headline-unit">turnos</span>
+            </div>
+            <div class="asistencia-headline-sub" title="Promedio de turnos válidos por piloto programado">
+              ⌀ <strong>${dist.avgShiftsPerPilot.toFixed(1)}</strong> t/piloto
+            </div>
+          </div>
+        `,
+        target: `Meta: 5-7 turnos (Cat. Alta: ${p3Pct}% flota · ${s3Pct.toFixed(1)}% turnos)`,
         targetClass: p3Pct >= 35 ? 'target-good' : (p3Pct >= 20 ? 'target-warn' : 'target-bad'),
         icon: '📊',
         colorClass: progCardColor,
-        customProgressBar: `
-          <div class="kpi-progress-bar" style="display:flex;height:6px;border-radius:3px;overflow:hidden;background:rgba(255,255,255,0.08);gap:1px;" title="Azul: 1-2 turnos (${p1Pct}%) | Amarillo: 3-4 turnos (${p2Pct}%) | Verde: 5-7 turnos (${p3Pct}%)">
-            <div style="width:${p1Pct}%;background:#60a5fa;" title="1 a 2 turnos: ${fmtNum(dist.cat1Pilots, 0)} pilotos (${p1Pct}%)"></div>
-            <div style="width:${p2Pct}%;background:#f59e0b;" title="3 a 4 turnos: ${fmtNum(dist.cat2Pilots, 0)} pilotos (${p2Pct}%)"></div>
-            <div style="width:${p3Pct}%;background:#10b981;" title="5 a 7 turnos: ${fmtNum(dist.cat3Pilots, 0)} pilotos (${p3Pct}%)"></div>
-          </div>
-        `,
+        customProgressBar: ' ',
         progressPct: Math.min(100, Math.max(0, p3Pct)),
         sub: `
-          <div class="asistencia-prog-grid">
-            <!-- Categoría 1: 1 a 2 turnos -->
-            <div class="asistencia-prog-col col-baja">
-              <div class="asistencia-prog-col-header">
-                <span class="asistencia-range">🔵 1 a 2 turnos</span>
-                <span class="asistencia-badge badge-baja">Baja</span>
+          <div class="asistencia-dual-container">
+            <!-- 1. DISTRIBUCIÓN PORCENTUAL DE PILOTOS -->
+            <div class="asistencia-sub-panel panel-pilots">
+              <div class="asistencia-sub-panel-header">
+                <div class="sub-panel-title">
+                  <span>👥</span>
+                  <strong>Distribución de Pilotos</strong>
+                </div>
+                <div class="sub-panel-total">
+                  Total: <strong>${fmtNum(dist.totalPilots, 0)}</strong> (100%)
+                </div>
               </div>
-              <div class="asistencia-prog-numbers">
-                <span class="asistencia-pilots-val">${fmtNum(dist.cat1Pilots, 0)} <small>pilotos</small></span>
-                <span class="asistencia-pct-val pct-baja">${p1Pct}%</span>
+
+              <!-- Barra segmentada de pilotos -->
+              <div class="dual-bar" title="Pilotos: 1-2t (${p1Pct}%) | 3-4t (${p2Pct}%) | 5-7t (${p3Pct}%)">
+                <div style="width:${p1Pct}%;background:#60a5fa;" title="1 a 2 turnos: ${fmtNum(dist.cat1Pilots, 0)} pilotos (${p1Pct}%)"></div>
+                <div style="width:${p2Pct}%;background:#f59e0b;" title="3 a 4 turnos: ${fmtNum(dist.cat2Pilots, 0)} pilotos (${p2Pct}%)"></div>
+                <div style="width:${p3Pct}%;background:#10b981;" title="5 a 7 turnos: ${fmtNum(dist.cat3Pilots, 0)} pilotos (${p3Pct}%)"></div>
               </div>
-              <div class="asistencia-shifts-val">${fmtNum(dist.cat1Shifts, 0)} turnos válidos</div>
+
+              <!-- Categorías de pilotos -->
+              <div class="asistencia-cat-rows">
+                <div class="asistencia-cat-row">
+                  <span class="cat-label">🔵 1 a 2 turnos (Baja):</span>
+                  <span class="cat-val"><strong>${fmtNum(dist.cat1Pilots, 0)}</strong> pilotos <span class="cat-pct pct-baja">${p1Pct}%</span></span>
+                </div>
+                <div class="asistencia-cat-row">
+                  <span class="cat-label">🟡 3 a 4 turnos (Media):</span>
+                  <span class="cat-val"><strong>${fmtNum(dist.cat2Pilots, 0)}</strong> pilotos <span class="cat-pct pct-media">${p2Pct}%</span></span>
+                </div>
+                <div class="asistencia-cat-row">
+                  <span class="cat-label">🟢 5 a 7 turnos (Alta):</span>
+                  <span class="cat-val"><strong>${fmtNum(dist.cat3Pilots, 0)}</strong> pilotos <span class="cat-pct pct-alta">${p3Pct}%</span></span>
+                </div>
+              </div>
             </div>
 
-            <!-- Categoría 2: 3 a 4 turnos -->
-            <div class="asistencia-prog-col col-media">
-              <div class="asistencia-prog-col-header">
-                <span class="asistencia-range">🟡 3 a 4 turnos</span>
-                <span class="asistencia-badge badge-media">Media</span>
+            <!-- 2. DISTRIBUCIÓN PORCENTUAL DE TURNOS -->
+            <div class="asistencia-sub-panel panel-shifts">
+              <div class="asistencia-sub-panel-header">
+                <div class="sub-panel-title">
+                  <span>🗓️</span>
+                  <strong>Distribución de Turnos</strong>
+                </div>
+                <div class="sub-panel-total">
+                  Total: <strong>${fmtNum(dist.totalValidShifts, 0)}</strong> t (100%)
+                </div>
               </div>
-              <div class="asistencia-prog-numbers">
-                <span class="asistencia-pilots-val">${fmtNum(dist.cat2Pilots, 0)} <small>pilotos</small></span>
-                <span class="asistencia-pct-val pct-media">${p2Pct}%</span>
-              </div>
-              <div class="asistencia-shifts-val">${fmtNum(dist.cat2Shifts, 0)} turnos válidos</div>
-            </div>
 
-            <!-- Categoría 3: 5 a 7 turnos -->
-            <div class="asistencia-prog-col col-alta">
-              <div class="asistencia-prog-col-header">
-                <span class="asistencia-range">🟢 5 a 7 turnos</span>
-                <span class="asistencia-badge badge-alta">Alta (Meta)</span>
+              <!-- Barra segmentada de turnos -->
+              <div class="dual-bar" title="Turnos: 1-2t (${s1Pct.toFixed(1)}%) | 3-4t (${s2Pct.toFixed(1)}%) | 5-7t (${s3Pct.toFixed(1)}%)">
+                <div style="width:${s1Pct.toFixed(1)}%;background:#60a5fa;" title="1 a 2 turnos: ${fmtNum(dist.cat1Shifts, 0)} turnos (${s1Pct.toFixed(1)}%)"></div>
+                <div style="width:${s2Pct.toFixed(1)}%;background:#f59e0b;" title="3 a 4 turnos: ${fmtNum(dist.cat2Shifts, 0)} turnos (${s2Pct.toFixed(1)}%)"></div>
+                <div style="width:${s3Pct.toFixed(1)}%;background:#10b981;" title="5 a 7 turnos: ${fmtNum(dist.cat3Shifts, 0)} turnos (${s3Pct.toFixed(1)}%)"></div>
               </div>
-              <div class="asistencia-prog-numbers">
-                <span class="asistencia-pilots-val">${fmtNum(dist.cat3Pilots, 0)} <small>pilotos</small></span>
-                <span class="asistencia-pct-val pct-alta">${p3Pct}%</span>
+
+              <!-- Categorías de turnos -->
+              <div class="asistencia-cat-rows">
+                <div class="asistencia-cat-row">
+                  <span class="cat-label">🔵 1 a 2 turnos (Baja):</span>
+                  <span class="cat-val"><strong>${fmtNum(dist.cat1Shifts, 0)}</strong> turnos <span class="cat-pct pct-baja">${s1Pct.toFixed(1)}%</span></span>
+                </div>
+                <div class="asistencia-cat-row">
+                  <span class="cat-label">🟡 3 a 4 turnos (Media):</span>
+                  <span class="cat-val"><strong>${fmtNum(dist.cat2Shifts, 0)}</strong> turnos <span class="cat-pct pct-media">${s2Pct.toFixed(1)}%</span></span>
+                </div>
+                <div class="asistencia-cat-row">
+                  <span class="cat-label">🟢 5 a 7 turnos (Alta):</span>
+                  <span class="cat-val"><strong>${fmtNum(dist.cat3Shifts, 0)}</strong> turnos <span class="cat-pct pct-alta">${s3Pct.toFixed(1)}%</span></span>
+                </div>
               </div>
-              <div class="asistencia-shifts-val">${fmtNum(dist.cat3Shifts, 0)} turnos válidos</div>
             </div>
           </div>
         `,
-        tooltip: 'Distribución de pilotos por programación semanal calculada exclusivamente sobre Confirmados, Reemplazo, Adicional TaDa y Adicional autorizados. Conteo: cantidad de pilotos únicos por rango de turnos; Porcentaje: proporción sobre el total de pilotos filtrados (' + fmtNum(dist.totalPilots, 0) + ' pilotos = 100%).'
+        tooltip: 'Tarjeta integral de programación semanal: coexisten simultáneamente la distribución de pilotos (conteo único y % sobre flota filtrada) y la distribución de turnos (conteo y % sobre turnos válidos). Evaluado exclusivamente sobre Confirmados, Reemplazo, Adicional TaDa y Adicional autorizados.'
       };
     })()
   ];

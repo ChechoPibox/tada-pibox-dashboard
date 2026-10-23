@@ -896,7 +896,7 @@ function calculateModulo1Kpis(shifts, config = (typeof APP_CONFIG !== 'undefined
   const totalClassifiedPilots = cat1Pilots + cat2Pilots + cat3Pilots;
   const avgShiftsPerPilot = totalClassifiedPilots > 0 ? (validAssistanceShiftsTotal / totalClassifiedPilots) : 0;
 
-  // Cálculo dinámico de porcentajes sobre el total de pilotos clasificados (100%)
+  // 1. Cálculo dinámico de porcentajes sobre el total de pilotos clasificados (100%)
   // Garantiza que la suma de los porcentajes sea exactamente 100% mediante ajuste de residuos
   let cat1PilotsPct = 0;
   let cat2PilotsPct = 0;
@@ -931,9 +931,29 @@ function calculateModulo1Kpis(shifts, config = (typeof APP_CONFIG !== 'undefined
     cat3PilotsPct = p3;
   }
 
-  const cat1ShiftsPct = validAssistanceShiftsTotal > 0 ? (cat1Shifts / validAssistanceShiftsTotal) * 100 : 0;
-  const cat2ShiftsPct = validAssistanceShiftsTotal > 0 ? (cat2Shifts / validAssistanceShiftsTotal) * 100 : 0;
-  const cat3ShiftsPct = validAssistanceShiftsTotal > 0 ? (cat3Shifts / validAssistanceShiftsTotal) * 100 : 0;
+  // 2. Cálculo dinámico de porcentajes sobre el total de turnos válidos (100.0%)
+  let cat1ShiftsPct = 0;
+  let cat2ShiftsPct = 0;
+  let cat3ShiftsPct = 0;
+
+  if (validAssistanceShiftsTotal > 0) {
+    const rawS1 = (cat1Shifts / validAssistanceShiftsTotal) * 100;
+    const rawS2 = (cat2Shifts / validAssistanceShiftsTotal) * 100;
+    const rawS3 = (cat3Shifts / validAssistanceShiftsTotal) * 100;
+
+    let s1 = Math.round(rawS1 * 10) / 10;
+    let s2 = Math.round(rawS2 * 10) / 10;
+    let s3 = Math.round(rawS3 * 10) / 10;
+
+    const sum10 = Math.round((s1 + s2 + s3) * 10);
+    const diff10 = 1000 - sum10; // 100.0% * 10
+    if (diff10 !== 0) {
+      s3 = Math.round((s3 + diff10 / 10) * 10) / 10;
+    }
+    cat1ShiftsPct = s1;
+    cat2ShiftsPct = s2;
+    cat3ShiftsPct = s3;
+  }
 
   const asistenciaProgDistribution = {
     totalValidShifts: validAssistanceShiftsTotal,
