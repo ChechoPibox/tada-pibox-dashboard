@@ -1528,13 +1528,13 @@ function renderKpis() {
     {
       label: '6. Pilotos Activos',
       value: fmtNum(kpis.activePilotsCount, 0),
-      sub: 'Pilotos únicos (por ID) programados en el rango filtrado',
+      sub: `${fmtNum(kpis.activePilotsCount, 0)} conductores únicos con turno en el período`,
       icon: '🛵',
       colorClass: 'kpi-blue',
       target: 'Universo Único',
       targetClass: 'target-info',
       progressPct: 100,
-      tooltip: 'Cantidad de conductores distintos (por Cédula/ID) programados en el período y filtros seleccionados.'
+      tooltip: 'Cantidad de conductores únicos (por ID/Cédula) con al menos un turno programado en el rango de fechas seleccionado. Si un mismo ID aparece en múltiples fechas, turnos o tiendas, se contabiliza exactamente una sola vez.'
     },
     {
       label: '7. Paquetes Entregados',

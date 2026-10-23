@@ -756,16 +756,26 @@ function calculateModulo1Kpis(shifts, config = (typeof APP_CONFIG !== 'undefined
       }
     }
 
-    // Pilotos Activos y Asistencia
-    const pilotId = (s.pilot_id && String(s.pilot_id).trim() !== '' && String(s.pilot_id).trim() !== '—')
-      ? String(s.pilot_id).trim()
-      : (s.pilot && String(s.pilot).trim() !== '' && String(s.pilot).trim() !== '—' ? String(s.pilot).trim() : null);
+    // 6. PILOTOS ACTIVOS (Conteo estricto de ID únicos en el período seleccionado)
+    // Cada ID de piloto debe contabilizarse una sola vez dentro del período seleccionado,
+    // normalizado para evitar duplicidades por mayúsculas/minúsculas o tiendas distintas.
+    const rawPilotId = s.pilot_id ? String(s.pilot_id).trim() : '';
+    const cleanPilotId = (rawPilotId && rawPilotId !== '—' && rawPilotId !== '-' && rawPilotId.toLowerCase() !== 'null' && rawPilotId.toLowerCase() !== 'undefined')
+      ? rawPilotId.toLowerCase()
+      : null;
 
-    if (pilotId) {
-      if (!uniquePilotsMap.has(pilotId)) {
-        uniquePilotsMap.set(pilotId, { id: pilotId, attended: 0, total: 0 });
+    const rawPilotName = s.pilot ? String(s.pilot).trim() : '';
+    const cleanPilotName = (rawPilotName && rawPilotName !== '—' && rawPilotName !== '-' && rawPilotName.toLowerCase() !== 'sin piloto')
+      ? rawPilotName.toLowerCase()
+      : null;
+
+    const pilotKey = cleanPilotId || (cleanPilotName ? `NAME_${cleanPilotName}` : null);
+
+    if (pilotKey) {
+      if (!uniquePilotsMap.has(pilotKey)) {
+        uniquePilotsMap.set(pilotKey, { id: cleanPilotId || rawPilotName, name: rawPilotName, attended: 0, total: 0 });
       }
-      const pEntry = uniquePilotsMap.get(pilotId);
+      const pEntry = uniquePilotsMap.get(pilotKey);
       pEntry.total++;
 
       const isAttended = (
@@ -1138,14 +1148,15 @@ const RankingFlotaCriticaEngine = {
 
     shifts.forEach(s => {
       const pilotName = (s.pilot || '').trim();
-      const pilotId = (s.pilot_id || '').trim();
-      const key = pilotName || pilotId;
+      const rawPilotId = (s.pilot_id || '').trim();
+      const cleanPilotId = (rawPilotId && rawPilotId !== '—' && rawPilotId !== '-' && rawPilotId.toLowerCase() !== 'null' && rawPilotId.toLowerCase() !== 'undefined') ? rawPilotId.toLowerCase() : '';
+      const key = cleanPilotId ? `ID_${cleanPilotId}` : (pilotName.toLowerCase() || null);
       if (!key || key === '—' || key.toLowerCase() === 'sin piloto') return;
 
       if (!pilotMap[key]) {
         pilotMap[key] = {
-          pilot: pilotName || key,
-          pilot_id: pilotId || '—',
+          pilot: pilotName || rawPilotId || key,
+          pilot_id: rawPilotId || '—',
           phone: (s.phone && s.phone !== '—') ? s.phone : '—',
           city: (s.city && s.city !== '—') ? s.city : '—',
           stores: new Set(),
