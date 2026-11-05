@@ -422,28 +422,25 @@ const ChartManager = {
     const dayMap = {};
     dayOrder.forEach(d => { dayMap[d] = { covered: 0, missing: 0, cancels: 0, replacements: 0, total: 0 }; });
 
-    // Usar reconcileShiftsMatch agrupado por día
-    const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
     shifts.forEach(s => {
-      let dayName = s.weekday || '';
-      // Si no tiene weekday, calcularlo desde la fecha
-      if (!dayName && s.date && s.date.length >= 10) {
-        const d = new Date(s.date + 'T12:00:00');
-        dayName = !isNaN(d.getTime()) ? dayNames[d.getDay()] : '';
-      }
-      if (!dayName || !dayMap[dayName]) return;
+      // Normalización universal y robusta de día con tildes oficiales
+      const canonicalDay = typeof canonicalizeWeekday === 'function'
+        ? canonicalizeWeekday(s.weekday, s.date)
+        : (s.weekday || '');
+
+      if (!canonicalDay || !dayMap[canonicalDay]) return;
 
       const st = (s.status || '').toLowerCase().trim();
       const isPilotCancel = st === 'piloto cancela' || st === 'cancela piloto' || st === 'piloto canceló' || st === 'piloto cancelo';
       const isReplacement = st === 'reemplazo';
-      const isExcluded = st === 'tienda cerrada' || st === 'cliente cancela' || st === 'adicional autorizado' || st === 'adicional cancela';
-      const isAttended = s.attended;
+      const isExcluded = st === 'tienda cerrada' || st === 'cliente cancela' || st === 'adicional autorizado' || st === 'adicional no autorizado' || st === 'adicional cancela';
+      const isAttended = s.attended !== undefined ? s.attended : (st === 'confirmado' || isReplacement || st === 'adicional tada');
 
       if (isExcluded) return;
-      dayMap[dayName].total++;
-      if (isPilotCancel) dayMap[dayName].cancels++;
-      if (isReplacement) dayMap[dayName].replacements++;
-      if (isAttended) dayMap[dayName].covered++;
+      dayMap[canonicalDay].total++;
+      if (isPilotCancel) dayMap[canonicalDay].cancels++;
+      if (isReplacement) dayMap[canonicalDay].replacements++;
+      if (isAttended) dayMap[canonicalDay].covered++;
     });
 
     // Calcular faltantes reales (cancelaciones sin reemplazo)
@@ -652,9 +649,13 @@ const ChartManager = {
                 const idx = items[0]?.dataIndex;
                 const assist = assistData[idx];
                 const cancel = cancelData[idx];
+                const rawItem = weeklyData[idx];
                 const lines = [];
-                if (assist !== undefined) lines.push(assist >= 90 ? '✅ Asistencia en Meta SLA' : '⚠️ Asistencia BAJO Meta (< 90%)');
-                if (cancel !== undefined) lines.push(cancel <= 8 ? '✅ Cancelación en rango aceptable' : '🚨 Cancelación SOBRE Límite (> 8%)');
+                if (assist !== undefined) lines.push(assist >= 90 ? '✅ Asistencia en Meta SLA (≥ 90%)' : '⚠️ Asistencia BAJO Meta (< 90%)');
+                if (cancel !== undefined) lines.push(cancel <= 8 ? '✅ Cancelación en rango aceptable (≤ 8%)' : '🚨 Cancelación SOBRE Límite (> 8%)');
+                if (rawItem && rawItem.cancellationNetRatePct != null) {
+                  lines.push(`ℹ️ Tasa faltantes sin suplente: ${rawItem.cancellationNetRatePct.toFixed(1)}%`);
+                }
                 return lines;
               }
             }
@@ -945,48 +946,157 @@ const ChartManager = {
       return;
     }
 
-    // Encontrar la fecha más reciente en el dataset
-    let maxDateStr = '';
-    mallaShifts.forEach(s => {
-      if (s.date && s.date > maxDateStr) maxDateStr = s.date;
-    });
+    // ── LEER PERÍODO SELECCIONADO POR EL USUARIO ──────────────────────────────
+    // 1. Selector de modo específico del componente (si existe en index.html)
+    const modeSelect = document.getElementById('chartMonthVsMonthPeriodSelect');
+    const selectedMode = modeSelect ? modeSelect.value : 'auto';
 
-    if (!maxDateStr) {
-      delete this.instances[canvasId];
-      return;
-    }
+    // 2. Filtros globales del encabezado
+    const filterFromEl = document.getElementById('filterFrom');
+    const filterToEl   = document.getElementById('filterTo');
+    const userFrom = filterFromEl?.value?.trim() || '';  // YYYY-MM-DD o vacío
+    const userTo   = filterToEl?.value?.trim()   || '';  // YYYY-MM-DD o vacío
 
-    const [currY, currM, currD] = maxDateStr.split('-').map(Number);
-    const dayCutoff = currD;
-
-    const prevY = currM === 1 ? currY - 1 : currY;
-    const prevM = currM === 1 ? 12 : currM - 1;
+    let currentStart = '';
+    let currentEnd = '';
+    let prevStart = '';
+    let prevEnd = '';
+    let currLabel = '';
+    let prevLabel = '';
+    let comparisonSubtitle = '';
 
     const monthNames = ['', 'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-    const currMonthLabel = `${monthNames[currM]} ${currY}`;
-    const prevMonthLabel = `${monthNames[prevM]} ${prevY}`;
 
-    // Filtrar turnos de ambos periodos respetando exactamente los días 1 al dayCutoff
-    const currShifts = [];
-    const prevShifts = [];
+    // Manejo de modos explícitos configurados por el usuario
+    if (selectedMode === 'oct_vs_sep') {
+      currentStart = '2026-10-01'; currentEnd = '2026-10-31';
+      prevStart    = '2026-09-01'; prevEnd    = '2026-09-30';
+      currLabel = 'Oct 2026 (Mes Completo)';
+      prevLabel = 'Sep 2026 (Mes Completo)';
+      comparisonSubtitle = 'Octubre 2026 (1–31) vs. Septiembre 2026 (1–30)';
+    } else if (selectedMode === 'sep_vs_ago') {
+      currentStart = '2026-09-01'; currentEnd = '2026-09-30';
+      prevStart    = '2026-08-01'; prevEnd    = '2026-08-31';
+      currLabel = 'Sep 2026 (Mes Completo)';
+      prevLabel = 'Ago 2026 (Mes Completo)';
+      comparisonSubtitle = 'Septiembre 2026 (1–30) vs. Agosto 2026 (1–31)';
+    } else if (selectedMode === 'ago_vs_jul') {
+      currentStart = '2026-08-01'; currentEnd = '2026-08-31';
+      prevStart    = '2026-07-01'; prevEnd    = '2026-07-31';
+      currLabel = 'Ago 2026 (Mes Completo)';
+      prevLabel = 'Jul 2026 (Mes Completo)';
+      comparisonSubtitle = 'Agosto 2026 (1–31) vs. Julio 2026 (1–31)';
+    } else {
+      // MODO AUTO:
+      // (a) Si hay filtro desde/hasta en el encabezado
+      if (userFrom && userTo) {
+        currentStart = userFrom;
+        currentEnd   = userTo;
+      } else if (userFrom && !userTo) {
+        currentStart = userFrom;
+        let maxD = userFrom;
+        mallaShifts.forEach(s => { if (s.date && s.date >= userFrom && s.date > maxD) maxD = s.date; });
+        currentEnd = maxD;
+      } else if (!userFrom && userTo) {
+        currentEnd = userTo;
+        const [y, m] = userTo.split('-').map(Number);
+        currentStart = `${y}-${String(m).padStart(2, '0')}-01`;
+      } else if (typeof AppState !== 'undefined' && AppState.selectedModulo3Week && AppState.availableWeeks?.length) {
+        // (b) Si hay una semana seleccionada en Módulo 3
+        const wk = AppState.availableWeeks.find(w => w.weekKey === AppState.selectedModulo3Week);
+        if (wk) {
+          currentStart = wk.startDate;
+          currentEnd   = wk.endDate;
+        }
+      }
 
-    mallaShifts.forEach(s => {
-      if (!s.date || s.date.length < 10) return;
-      const [y, m, d] = s.date.split('-').map(Number);
-      if (d < 1 || d > dayCutoff) return;
+      // (c) Si sigue sin rango, usar el mes más reciente con datos completos (Octubre 2026)
+      if (!currentStart || !currentEnd) {
+        currentStart = '2026-10-01';
+        currentEnd   = '2026-10-31';
+        prevStart    = '2026-09-01';
+        prevEnd      = '2026-09-30';
+        currLabel    = 'Oct 2026 (Mes Completo)';
+        prevLabel    = 'Sep 2026 (Mes Completo)';
+        comparisonSubtitle = 'Octubre 2026 (1–31) vs. Septiembre 2026 (1–30)';
+      }
+    }
 
-      if (y === currY && m === currM) currShifts.push(s);
-      else if (y === prevY && m === prevM) prevShifts.push(s);
+    // Calcular período equivalente anterior si aún no está asignado
+    if (!prevStart || !prevEnd) {
+      const [cy1, cm1, cd1] = currentStart.split('-').map(Number);
+      const [cy2, cm2, cd2] = currentEnd.split('-').map(Number);
+
+      // Si el rango está dentro del mismo mes
+      if (cy1 === cy2 && cm1 === cm2) {
+        const py = cm1 === 1 ? cy1 - 1 : cy1;
+        const pm = cm1 === 1 ? 12 : cm1 - 1;
+        const lastDayPrev = new Date(py, pm, 0).getDate();
+        const pd1 = Math.min(cd1, lastDayPrev);
+        const pd2 = Math.min(cd2, lastDayPrev);
+
+        prevStart = `${py}-${String(pm).padStart(2, '0')}-${String(pd1).padStart(2, '0')}`;
+        prevEnd   = `${py}-${String(pm).padStart(2, '0')}-${String(pd2).padStart(2, '0')}`;
+
+        if (cd1 === 1 && cd2 >= 28) {
+          currLabel = `${monthNames[cm1]} ${cy1} (Mes Completo)`;
+          prevLabel = `${monthNames[pm]} ${py} (Mes Completo)`;
+          comparisonSubtitle = `${monthNames[cm1]} ${cy1} (1–${cd2}) vs. ${monthNames[pm]} ${py} (1–${pd2})`;
+        } else {
+          currLabel = `${monthNames[cm1]} ${cy1} (Día ${cd1}–${cd2})`;
+          prevLabel = `${monthNames[pm]} ${py} (Día ${pd1}–${pd2})`;
+          comparisonSubtitle = `Días ${cd1}–${cd2} (${monthNames[cm1]} ${cy1} vs. ${monthNames[pm]} ${py})`;
+        }
+      } else {
+        // Rango multi-mes o semana puntual (ej. Semana 44: 26 Oct al 01 Nov)
+        const dStart = typeof parseDateToNoon === 'function' ? parseDateToNoon(currentStart) : new Date(currentStart + 'T12:00:00');
+        const dEnd   = typeof parseDateToNoon === 'function' ? parseDateToNoon(currentEnd) : new Date(currentEnd + 'T12:00:00');
+        const diffMs = dEnd.getTime() - dStart.getTime();
+        const diffDays = Math.round(diffMs / (86400000)) + 1;
+
+        if (diffDays >= 6 && diffDays <= 8) {
+          // Semana de 7 días: comparar contra la semana calendario inmediatamente anterior
+          const pEndD = new Date(dStart.getTime() - 86400000);
+          const pStartD = new Date(pEndD.getTime() - ((diffDays - 1) * 86400000));
+          prevStart = typeof formatDateToNoonIso === 'function' ? formatDateToNoonIso(pStartD) : pStartD.toISOString().substring(0, 10);
+          prevEnd   = typeof formatDateToNoonIso === 'function' ? formatDateToNoonIso(pEndD) : pEndD.toISOString().substring(0, 10);
+          currLabel = `${currentStart.substring(5)} a ${currentEnd.substring(5)}`;
+          prevLabel = `${prevStart.substring(5)} a ${prevEnd.substring(5)}`;
+          comparisonSubtitle = `Semana actual (${currentStart} al ${currentEnd}) vs. Semana previa (${prevStart} al ${prevEnd})`;
+        } else {
+          // Desfasar exactamente 1 mes hacia atrás
+          const p1 = new Date(dStart); p1.setMonth(p1.getMonth() - 1);
+          const p2 = new Date(dEnd);   p2.setMonth(p2.getMonth() - 1);
+          prevStart = typeof formatDateToNoonIso === 'function' ? formatDateToNoonIso(p1) : p1.toISOString().substring(0, 10);
+          prevEnd   = typeof formatDateToNoonIso === 'function' ? formatDateToNoonIso(p2) : p2.toISOString().substring(0, 10);
+          currLabel = `${currentStart} al ${currentEnd}`;
+          prevLabel = `${prevStart} al ${prevEnd}`;
+          comparisonSubtitle = `${currentStart} al ${currentEnd} vs. ${prevStart} al ${prevEnd}`;
+        }
+      }
+    }
+
+    // Filtrar turnos de ambos periodos respetando rigurosamente los rangos con corte de 12:00 PM
+    const currShifts = mallaShifts.filter(s => {
+      return typeof isDateInRangeWithNoonCut === 'function'
+        ? isDateInRangeWithNoonCut(s.date, currentStart, currentEnd)
+        : (s.date && s.date >= currentStart && s.date <= currentEnd);
     });
 
-    // Actualizar badges en index.html
+    const prevShifts = mallaShifts.filter(s => {
+      return typeof isDateInRangeWithNoonCut === 'function'
+        ? isDateInRangeWithNoonCut(s.date, prevStart, prevEnd)
+        : (s.date && s.date >= prevStart && s.date <= prevEnd);
+    });
+
+    // Actualizar subtítulos y badge en index.html
     const subEl = document.getElementById('monthVsMonthSubtitle');
     const badgeEl = document.getElementById('monthVsMonthBadge');
     if (subEl) {
-      subEl.innerText = `Corte cronológico equivalente: Días 1 al ${dayCutoff} (${currMonthLabel} vs. ${prevMonthLabel})`;
+      subEl.innerText = `Corte cronológico equivalente: ${comparisonSubtitle}`;
     }
     if (badgeEl) {
-      badgeEl.innerText = `Día 1–${dayCutoff} · ${currShifts.length} vs ${prevShifts.length} turnos`;
+      badgeEl.innerText = `${currShifts.length} vs ${prevShifts.length} turnos`;
     }
 
     const calcPeriodMetrics = (shifts) => {
@@ -1057,13 +1167,13 @@ const ChartManager = {
         labels: categories,
         datasets: [
           {
-            label: `${currMonthLabel} (Día 1–${dayCutoff})`,
+            label: `${currLabel}`,
             data: currValues,
             backgroundColor: this.colors.violet,
             borderRadius: 5
           },
           {
-            label: `${prevMonthLabel} (Día 1–${dayCutoff})`,
+            label: `${prevLabel}`,
             data: prevValues,
             backgroundColor: 'rgba(148, 163, 184, 0.55)',
             borderRadius: 5

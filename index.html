@@ -726,9 +726,17 @@
             <div class="panel-header" style="flex-wrap: wrap; gap: 10px;">
               <div>
                 <div class="panel-title" style="font-size: 0.95rem;">📅 Comparativo Mes Actual vs. Mes Anterior</div>
-                <div class="panel-subtitle" id="monthVsMonthSubtitle" style="font-size: 0.78rem;">Periodos cronológicamente equivalentes (corte mismo día)</div>
+                <div class="panel-subtitle" id="monthVsMonthSubtitle" style="font-size: 0.78rem;">Periodos cronológicamente equivalentes</div>
               </div>
-              <div id="monthVsMonthBadge" class="pill pill-neutral" style="font-size: 0.75rem;">Periodo Equivalente</div>
+              <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                <select id="chartMonthVsMonthPeriodSelect" class="filter-select" style="font-size: 0.75rem; padding: 3px 6px;">
+                  <option value="auto">Automático (Según filtro activo)</option>
+                  <option value="oct_vs_sep">Mes Completo: Oct 2026 vs Sep 2026</option>
+                  <option value="sep_vs_ago">Mes Completo: Sep 2026 vs Ago 2026</option>
+                  <option value="ago_vs_jul">Mes Completo: Ago 2026 vs Jul 2026</option>
+                </select>
+                <div id="monthVsMonthBadge" class="pill pill-neutral" style="font-size: 0.75rem;">Periodo Equivalente</div>
+              </div>
             </div>
             <div class="chart-container" style="height: 280px;">
               <canvas id="chartMonthVsPreviousMonth"></canvas>
@@ -1070,15 +1078,15 @@
   <script src="./js/vendor/chart.umd.min.js"></script>
 
   <!-- Módulos de la Aplicación -->
-  <script src="./js/config.js?v=20261023_v89"></script>
-  <script src="./js/productivity-matrix.js?v=20261023_v89"></script>
-  <script src="./js/rules.js?v=20261023_v89"></script>
-  <script src="./js/storage-db.js?v=20261023_v89"></script>
-  <script src="./js/sheets-service.js?v=20261023_v89"></script>
-  <script src="./js/coverage-engine.js?v=20261023_v89"></script>
-  <script src="./js/charts.js?v=20261023_v89"></script>
-  <script src="./js/data.js?v=20261023_v89"></script>
-  <script src="./js/app.js?v=20261023_v89"></script>
+  <script src="./js/config.js?v=20261105_v95"></script>
+  <script src="./js/productivity-matrix.js?v=20261105_v95"></script>
+  <script src="./js/rules.js?v=20261105_v95"></script>
+  <script src="./js/storage-db.js?v=20261105_v95"></script>
+  <script src="./js/sheets-service.js?v=20261105_v95"></script>
+  <script src="./js/coverage-engine.js?v=20261105_v95"></script>
+  <script src="./js/charts.js?v=20261105_v95"></script>
+  <script src="./js/data.js?v=20261105_v95"></script>
+  <script src="./js/app.js?v=20261105_v95"></script>
 </body>
 </html>
 

@@ -62,6 +62,34 @@ function formatDateToNoonIso(dateObj) {
 }
 
 /**
+ * Normaliza y homologa cualquier nombre de día de la semana a su versión canónica oficial con tildes:
+ * 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'.
+ * Maneja fuentes sin tildes ('Miercoles', 'Sabado'), diferencias de mayúsculas/minúsculas,
+ * espacios en blanco, días festivos ('Lunes Festivo') y distorsiones de codificación UTF-8.
+ * Si raw no está presente, lo deduce a partir de la fecha (dateStr) al mediodía local.
+ */
+function canonicalizeWeekday(raw, dateStr) {
+  if (raw) {
+    const clean = String(raw).trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    if (clean.startsWith('lu')) return 'Lunes';
+    if (clean.startsWith('ma')) return 'Martes';
+    if (clean.startsWith('mi')) return 'Miércoles';
+    if (clean.startsWith('ju')) return 'Jueves';
+    if (clean.startsWith('vi')) return 'Viernes';
+    if (clean.startsWith('sa')) return 'Sábado';
+    if (clean.startsWith('do')) return 'Domingo';
+  }
+  if (dateStr) {
+    const dNoon = typeof parseDateToNoon === 'function' ? parseDateToNoon(dateStr) : null;
+    if (dNoon && !isNaN(dNoon.getTime())) {
+      const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+      return dayNames[dNoon.getDay()];
+    }
+  }
+  return '';
+}
+
+/**
  * Valida si la fecha del turno cae dentro del rango [fromStr, toStr]
  * evaluando con corte horario estricto de 12:00 PM para interpretar cada día puntual.
  */
@@ -837,10 +865,20 @@ function calculateModulo1Kpis(shifts, config = (typeof APP_CONFIG !== 'undefined
 
   });
 
-  // Denominador para tasas de cancelación (sobre el universo de turnos requeridos del match)
+  // ── TASA DE CANCELACIÓN (Fórmula oficial según Contexto del Proyecto) ───────────────────────
+  // Definición oficial: % Tasa de Cancelación = [Piloto Cancela / Evaluables] × 100
+  // Turnos Evaluables = Cumplidos (Confirmado, Reemplazo, Adicional) + Piloto Cancela
+  // EXCLUIR del numerador y denominador: Cliente Cancela, No Programado, Sin Piloto
+  // Estos eventos NO son responsabilidad del piloto y no deben distorsionar su tasa.
+  const attendedForCancellation = cuposConfirmados + cuposReemplazo + cuposAdicionalTaDa + cuposAdicionalAutorizados;
+  const evaluableForCancellation = attendedForCancellation + penalizedPilotCancel;
+  const cancellationRatePct = evaluableForCancellation > 0
+    ? (penalizedPilotCancel / evaluableForCancellation) * 100
+    : 0;
+
+  // Tasa neta: cancelaciones que quedaron sin cobertura de reemplazo (para cuadre operativo de cupos)
   const totalBaseDenominator = matchResult.totalSlotsRequired > 0 ? matchResult.totalSlotsRequired : totalFiltered;
-  const totalOperativeCancels = penalizedPilotCancel + penalizedClientCancel;
-  const cancellationRatePct = totalBaseDenominator > 0 ? (totalOperativeCancels / totalBaseDenominator) * 100 : 0;
+  const totalOperativeCancels = penalizedPilotCancel + penalizedClientCancel; // preservado para compatibilidad interna
   const cancellationNetRatePct = totalBaseDenominator > 0 ? (matchResult.totalUnmatchedCancels / totalBaseDenominator) * 100 : 0;
 
   // ── COBERTURA DE CUPOS (Fórmula oficial ajustada de Tarjeta 3) ─────────────────────────

@@ -571,6 +571,11 @@ function restoreTableSort(tableOrId) {
 function refreshProductivityMatches(shifts) {
   if (!shifts || !shifts.length) return;
   shifts.forEach(s => {
+    // Normalizar día de la semana canónico (con tildes oficiales: Miércoles, Sábado)
+    if (typeof canonicalizeWeekday === 'function') {
+      s.weekday = canonicalizeWeekday(s.weekday, s.date);
+    }
+
     // Normalizar evaluable, attended, pilot_cancel y excluded si faltan
     if (s.evaluable === undefined || s.attended === undefined || s.pilot_cancel === undefined) {
       const cls = typeof classifyShiftStatus === 'function' ? classifyShiftStatus(s.status) : null;
@@ -614,7 +619,7 @@ async function initApp() {
     const meta = await TaDaDB.getMeta('last_sync');
 
     // Detectar caché obsoleto, incompleto o con esquema previo
-    const CACHE_VERSION = '2026-10-21-evaluable-v26-clean';
+    const CACHE_VERSION = '2026-11-05-v95-verified';
     const cachedVersion = await TaDaDB.getMeta('cache_version');
     const versionMismatch = cachedVersion !== CACHE_VERSION;
     const cachedCities = new Set(cachedMalla.map(r => r.city).filter(Boolean));
@@ -961,6 +966,11 @@ function setupEventListeners() {
   document.getElementById('modulo3WeekSelect')?.addEventListener('change', (e) => {
     AppState.selectedModulo3Week = e.target.value;
     renderModulo3Visuals();
+  });
+
+  // Selector de período para Gráfica 6 (Comparativo Mes Actual vs. Mes Anterior)
+  document.getElementById('chartMonthVsMonthPeriodSelect')?.addEventListener('change', () => {
+    ChartManager.renderMonthVsPreviousMonthChart('chartMonthVsPreviousMonth', AppState.mallaShifts);
   });
 
   // Modal Configuración
@@ -2214,13 +2224,29 @@ function renderModulo3Visuals() {
     if (!citySelect._hasCityListener) {
       citySelect._hasCityListener = true;
       citySelect.addEventListener('change', () => {
-        ChartManager.renderCityStorePerformanceChart('chartCityStorePerformance', targetMalla, citySelect.value);
+        // Usar mallaShifts filtrado por ciudad/tienda del header (no por semana)
+        // para garantizar que TODAS las ciudades tengan datos suficientes en la vista global
+        const allMallaForCity = AppState.mallaShifts.filter(s => {
+          if (city && s.city !== city) return false;
+          if (store && s.store !== store) return false;
+          return true;
+        });
+        ChartManager.renderCityStorePerformanceChart('chartCityStorePerformance', allMallaForCity, citySelect.value);
       });
     }
   }
 
   // Renderizar Gráfica 5: Desempeño Operativo por Ciudad y Tienda (Req 7)
-  ChartManager.renderCityStorePerformanceChart('chartCityStorePerformance', targetMalla, citySelect?.value || '');
+  // CORRECCIÓN ERROR 1: Usar AppState.mallaShifts (filtrado solo por ciudad/tienda del header,
+  // NO por semana seleccionada) para que TODAS las ciudades, incluida Cali, aparezcan en la vista global.
+  // La vista de semana es correcta para los otros gráficos, pero para el comparativo por ciudad
+  // necesitamos el histórico completo para que el gráfico tenga representatividad estadística.
+  const mallaForCityChart = AppState.mallaShifts.filter(s => {
+    if (city && s.city !== city) return false;
+    if (store && s.store !== store) return false;
+    return true;
+  });
+  ChartManager.renderCityStorePerformanceChart('chartCityStorePerformance', mallaForCityChart, citySelect?.value || '');
 
   // Renderizar Gráfica 6: Comparativo Mes Actual vs. Mes Anterior con corte equivalente (Req 8)
   ChartManager.renderMonthVsPreviousMonthChart('chartMonthVsPreviousMonth', AppState.mallaShifts);
@@ -2254,8 +2280,9 @@ function renderModulo3Visuals() {
       totalShifts: kpi.asistenciaRequiredCount > 0 ? kpi.asistenciaRequiredCount : shiftsInWeek.length,
       rawTotalShifts: shiftsInWeek.length,
       attendancePct: kpi.asistenciaEffectivenessPct || 0,
-      cancellationPct: kpi.cancellationNetRatePct != null ? kpi.cancellationNetRatePct : (kpi.cancellationRatePct || 0),
+      cancellationPct: kpi.cancellationRatePct || 0,
       cancellationGrossPct: kpi.cancellationRatePct || 0,
+      cancellationNetRatePct: kpi.cancellationNetRatePct || 0,
       cuposCoveragePct: kpi.cuposCoveragePct || 0,
       cuposCoveredCount: kpi.cuposCoveredCount,
       cuposEvaluatedCount: kpi.cuposEvaluatedCount,
@@ -3507,3 +3534,116 @@ function exportEscalafonGlobalCsv() {
 }
 
 document.addEventListener('DOMContentLoaded', initApp);
+
+// ============================================================
+// AUTO-REFRESH: Actualización automática cada 60 segundos
+// ============================================================
+// Requisitos implementados:
+//  ✅ Actualiza cada 60 segundos sin recargar la página
+//  ✅ No reinicia los filtros del usuario
+//  ✅ No ejecuta múltiples procesos simultáneos (guard de concurrencia)
+//  ✅ No duplica registros (syncAll reemplaza datos en IndexedDB)
+//  ✅ Manejo de error: si la fuente falla, mantiene los datos en memoria
+//  ✅ Muestra discreta de la última hora de actualización exitosa
+// ============================================================
+let _autoRefreshTimer = null;
+let _autoRefreshRunning = false;
+
+async function autoRefreshTick() {
+  // Guard de concurrencia: si ya hay una sincronización en curso, no lanzar otra
+  if (_autoRefreshRunning) {
+    console.log('[AutoRefresh] Sincronización en curso, se omite este ciclo.');
+    return;
+  }
+  _autoRefreshRunning = true;
+
+  try {
+    // Capturar el estado actual de los filtros para restaurarlos después
+    const prevCity   = document.getElementById('filterCity')?.value  || '';
+    const prevStore  = document.getElementById('filterStore')?.value || '';
+    const prevFrom   = document.getElementById('filterFrom')?.value  || '';
+    const prevTo     = document.getElementById('filterTo')?.value    || '';
+    const prevPilot  = document.getElementById('filterPilot')?.value || '';
+    const prevDemand = document.getElementById('filterDemand')?.value || '';
+    const prevSemana = document.getElementById('filterSemana')?.value || '';
+    const prevDays   = AppState.selectedDays ? [...AppState.selectedDays] : [];
+    const prevTimes  = AppState.selectedStartTimes ? [...AppState.selectedStartTimes] : [];
+    const prevStats  = AppState.selectedStatuses ? [...AppState.selectedStatuses] : [];
+    const prevMod3Week = AppState.selectedModulo3Week;
+
+    // Intentar sincronizar con Google Sheets
+    const result = await SheetsService.syncAll(null); // sin callback de progreso visible
+
+    // Actualizar datos en memoria
+    AppState.mallaShifts = result.mallaShifts;
+    AppState.progShifts  = result.progShifts;
+    AppState.temporal    = sanitizeTemporalWindow(result.temporal);
+
+    // Restaurar filtros del usuario (no reiniciar)
+    const setVal = (id, v) => { const el = document.getElementById(id); if (el && v) el.value = v; };
+    setVal('filterCity',   prevCity);
+    setVal('filterStore',  prevStore);
+    setVal('filterFrom',   prevFrom);
+    setVal('filterTo',     prevTo);
+    setVal('filterPilot',  prevPilot);
+    setVal('filterDemand', prevDemand);
+    setVal('filterSemana', prevSemana);
+    if (prevDays.length)  { AppState.selectedDays = prevDays;  multiSelectDia?.setSelected(prevDays); }
+    if (prevTimes.length) { AppState.selectedStartTimes = prevTimes; multiSelectInicio?.setSelected(prevTimes); }
+    if (prevStats.length) { AppState.selectedStatuses = prevStats; multiSelectEstado?.setSelected(prevStats); }
+    if (prevMod3Week) AppState.selectedModulo3Week = prevMod3Week;
+
+    // Re-renderizar sin resetear filtros
+    updateTemporalBanner();
+    populateFilterOptions();
+    applyFilters();
+
+    // Mostrar hora de última actualización exitosa
+    const now = new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    updateSyncStatus(`🔄 Auto-actualizado · ${now} (${AppState.mallaShifts.length} turnos)`);
+
+  } catch (err) {
+    // Si falla la sincronización automática, conservar los datos actuales en memoria
+    // No mostrar error intrusivo, solo registrar en consola y actualizar el status
+    console.warn('[AutoRefresh] Falló sincronización automática, datos locales conservados:', err.message);
+    const now = new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    updateSyncStatus(`⚠️ Auto-refresh falló a las ${now} · Reintentando en 60s`);
+  } finally {
+    _autoRefreshRunning = false;
+  }
+}
+
+function startAutoRefresh(intervalMs = 60000) {
+  // Limpiar timer previo si existe
+  if (_autoRefreshTimer) {
+    clearInterval(_autoRefreshTimer);
+    _autoRefreshTimer = null;
+  }
+  _autoRefreshTimer = setInterval(autoRefreshTick, intervalMs);
+  console.log(`[AutoRefresh] Iniciado. Intervalo: ${intervalMs / 1000}s`);
+}
+
+function stopAutoRefresh() {
+  if (_autoRefreshTimer) {
+    clearInterval(_autoRefreshTimer);
+    _autoRefreshTimer = null;
+    console.log('[AutoRefresh] Detenido.');
+  }
+}
+
+// Iniciar auto-refresh después de que la app cargue (sin bloquear la carga inicial)
+document.addEventListener('DOMContentLoaded', () => {
+  // Esperar 10 segundos después de la carga para lanzar el primer ciclo automático
+  // Esto evita interferir con la carga inicial de IndexedDB y los datos base
+  setTimeout(() => startAutoRefresh(60000), 10000);
+});
+
+// Pausar auto-refresh cuando la pestaña no está visible (ahorrar recursos)
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    stopAutoRefresh();
+  } else {
+    // Al volver a la pestaña, reiniciar el timer
+    startAutoRefresh(60000);
+  }
+});

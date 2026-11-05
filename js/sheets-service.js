@@ -377,11 +377,10 @@ const SheetsService = {
       if (!rawPilot && !rawStatus) continue;
 
       const dateStr = this.normalizeDate(r[colFecha]);
-      let weekday = colDia >= 0 ? String(r[colDia] || '').trim() : '';
-      if (!weekday && dateStr) {
-        const dObj = new Date(dateStr + 'T12:00:00');
-        if (!isNaN(dObj.getTime())) weekday = dayNames[dObj.getDay()];
-      }
+      const rawWeekday = colDia >= 0 ? String(r[colDia] || '').trim() : '';
+      const weekday = typeof canonicalizeWeekday === 'function'
+        ? canonicalizeWeekday(rawWeekday, dateStr)
+        : (rawWeekday || (dateStr ? dayNames[new Date(dateStr + 'T12:00:00').getDay()] : ''));
 
       const pilotId = String(r[colId] || '').trim();
       const phone = String(r[colTel] || '').trim();
@@ -469,11 +468,10 @@ const SheetsService = {
       if (!store && !rawPilot) continue;
 
       const dateStr = this.normalizeDate(r[colFecha]);
-      let weekday = colDia >= 0 ? String(r[colDia] || '').trim() : '';
-      if (!weekday && dateStr) {
-        const dObj = new Date(dateStr + 'T12:00:00');
-        if (!isNaN(dObj.getTime())) weekday = dayNames[dObj.getDay()];
-      }
+      const rawWeekday = colDia >= 0 ? String(r[colDia] || '').trim() : '';
+      const weekday = typeof canonicalizeWeekday === 'function'
+        ? canonicalizeWeekday(rawWeekday, dateStr)
+        : (rawWeekday || (dateStr ? dayNames[new Date(dateStr + 'T12:00:00').getDay()] : ''));
 
       const city = String(r[colCiudad] || '').trim();
       const rawStatus = String(r[colEstado] || '').trim();
@@ -523,7 +521,8 @@ const SheetsService = {
     for (let i = 1; i < csvRows.length; i++) {
       const r = csvRows[i];
       const store = String(r[colPunto] || '').trim();
-      const dia = String(r[colDia] || '').trim();
+      const rawDia = String(r[colDia] || '').trim();
+      const dia = typeof canonicalizeWeekday === 'function' ? canonicalizeWeekday(rawDia) : rawDia;
       const inicio = String(r[colInicio] || '').trim();
       const paq = parseFloat(r[colPaq]);
       if (!store || !dia || !inicio || isNaN(paq)) continue;
