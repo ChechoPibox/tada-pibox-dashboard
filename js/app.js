@@ -26,7 +26,9 @@ const AppState = {
   // In-table search strings
   mallaSearch: '',
   coberturaSearch: '',
-  flotaSearch: ''
+  flotaSearch: '',
+  // Registro de estado de llamados de atención por piloto: { [pilotKey]: { status: 'pending'|'sent'|'failed', timestamp, note } }
+  llamadosStatus: {}
 };
 
 // Instancias globales de multiselect
@@ -619,7 +621,7 @@ async function initApp() {
     const meta = await TaDaDB.getMeta('last_sync');
 
     // Detectar caché obsoleto, incompleto o con esquema previo
-    const CACHE_VERSION = '2026-11-06-v97-city-week-filter';
+    const CACHE_VERSION = '2026-11-06-v98-llamados-sync-wa-direct';
     const cachedVersion = await TaDaDB.getMeta('cache_version');
     const versionMismatch = cachedVersion !== CACHE_VERSION;
     const cachedCities = new Set(cachedMalla.map(r => r.city).filter(Boolean));
@@ -957,6 +959,14 @@ function setupEventListeners() {
         if (toInput) toInput.value = parts[1];
         if (fromPicker) fromPicker.value = parts[0];
         if (toPicker) toPicker.value = parts[1];
+
+        // Sincronizar automáticamente con AppState.selectedModulo3Week
+        const matchedWeek = AppState.availableWeeks?.find(w => w.startDate === parts[0] && w.endDate === parts[1]);
+        if (matchedWeek) {
+          AppState.selectedModulo3Week = matchedWeek.weekKey;
+          const mod3Sel = document.getElementById('modulo3WeekSelect');
+          if (mod3Sel) mod3Sel.value = matchedWeek.weekKey;
+        }
       }
     }
     applyFilters();
@@ -2597,6 +2607,18 @@ function renderTop5StoreTable() {
       ? `<span class="pill pill-bad" style="font-weight:700;">${p.cancels} canc</span>`
       : `<span style="color:var(--text-muted);">0</span>`;
 
+    const pKey = (p.pilot || '').trim().toLowerCase();
+    const llamadoInfo = AppState.llamadosStatus?.[pKey];
+    let llamadoBtnBadge = '💬 Llamado';
+    let llamadoBtnStyle = 'border-color:rgba(239,68,68,0.4);color:#fca5a5;';
+    if (llamadoInfo?.status === 'sent') {
+      llamadoBtnBadge = '✅ Enviado';
+      llamadoBtnStyle = 'border-color:rgba(16,185,129,0.5);color:#34d399;background:rgba(16,185,129,0.12);';
+    } else if (llamadoInfo?.status === 'failed') {
+      llamadoBtnBadge = '❌ Fallido';
+      llamadoBtnStyle = 'border-color:rgba(239,68,68,0.6);color:#ef4444;background:rgba(239,68,68,0.12);';
+    }
+
     return `
       <tr>
         <td style="text-align:center;">${posBadge}</td>
@@ -2624,8 +2646,8 @@ function renderTop5StoreTable() {
             <button class="btn btn-secondary" onclick="viewPilotProfileDirect(decodeURIComponent('${encodeURIComponent(p.pilot || '')}'))" style="padding:4px 8px;font-size:0.75rem;" title="Ver Ficha 360°">
               👤 360°
             </button>
-            <button class="btn btn-secondary btn-sm" onclick="openLlamadoModalFromRanking(${idx}, 'store')" style="padding:4px 8px;font-size:0.75rem;border-color:rgba(239,68,68,0.4);color:#fca5a5;" title="Enviar Llamado de Atención por WhatsApp">
-              💬 Llamado
+            <button class="btn btn-secondary btn-sm" onclick="openLlamadoModalFromRanking(${idx}, 'store')" style="padding:4px 8px;font-size:0.75rem;${llamadoBtnStyle}" title="Enviar Llamado de Atención por WhatsApp">
+              ${llamadoBtnBadge}
             </button>
           </div>
         </td>
@@ -2663,6 +2685,18 @@ function renderTop10GlobalTable() {
   tableBody.innerHTML = fleetRanking.map((p, idx) => {
     const posLabel = idx < 3 ? medals[idx] : `#${idx + 1}`;
     const rankClass = p.cancels >= 3 ? 'pill-bad' : (p.cancels >= 1 ? 'pill-warn' : (p.attendedCount > 0 ? 'pill-good' : 'pill-neutral'));
+
+    const pKey = (p.pilot || '').trim().toLowerCase();
+    const llamadoInfo = AppState.llamadosStatus?.[pKey];
+    let llamadoBtnBadge = '💬 Llamado';
+    let llamadoBtnStyle = 'border-color:rgba(239,68,68,0.4);color:#fca5a5;';
+    if (llamadoInfo?.status === 'sent') {
+      llamadoBtnBadge = '✅ Enviado';
+      llamadoBtnStyle = 'border-color:rgba(16,185,129,0.5);color:#34d399;background:rgba(16,185,129,0.12);';
+    } else if (llamadoInfo?.status === 'failed') {
+      llamadoBtnBadge = '❌ Fallido';
+      llamadoBtnStyle = 'border-color:rgba(239,68,68,0.6);color:#ef4444;background:rgba(239,68,68,0.12);';
+    }
 
     return `
       <tr>
@@ -2708,8 +2742,8 @@ function renderTop10GlobalTable() {
             <button class="btn btn-secondary" onclick="viewPilotProfileDirect(decodeURIComponent('${encodeURIComponent(p.pilot || '')}'))" style="padding:4px 8px;font-size:0.75rem;" title="Ver Ficha 360°">
               🔍 360°
             </button>
-            <button class="btn btn-secondary btn-sm" onclick="openLlamadoModalFromRanking(${idx}, 'global')" style="padding:4px 8px;font-size:0.75rem;border-color:rgba(239,68,68,0.4);color:#fca5a5;" title="Enviar Llamado de Atención por WhatsApp">
-              💬 Llamado
+            <button class="btn btn-secondary btn-sm" onclick="openLlamadoModalFromRanking(${idx}, 'global')" style="padding:4px 8px;font-size:0.75rem;${llamadoBtnStyle}" title="Enviar Llamado de Atención por WhatsApp">
+              ${llamadoBtnBadge}
             </button>
           </div>
         </td>
@@ -2989,20 +3023,32 @@ function openLlamadoModal(pilotData, type = 'cancelaciones') {
   const modal = document.getElementById('modalLlamadoAtencion');
   if (!modal) return;
 
-  // Determinar semana evaluada para la plantilla
+  // Determinar semana evaluada para la plantilla de manera estrictamente sincronizada con los filtros activos
   let semanaEvaluada = '';
-  if (AppState.selectedModulo3Week && AppState.availableWeeks) {
+  const filterSemanaVal = document.getElementById('filterSemana')?.value || '';
+  const fromVal = document.getElementById('filterFrom')?.value || '';
+  const toVal = document.getElementById('filterTo')?.value || '';
+
+  // 1. Prioridad: filtro de semana global explícito (ej: '2026-10-26:2026-11-01')
+  if (filterSemanaVal && filterSemanaVal.includes(':')) {
+    const [s, e] = filterSemanaVal.split(':');
+    if (s && e) semanaEvaluada = `${s} al ${e}`;
+  }
+
+  // 2. Prioridad: selector de fechas manual (Desde / Hasta)
+  if (!semanaEvaluada && fromVal && toVal) {
+    semanaEvaluada = `${fromVal} al ${toVal}`;
+  }
+
+  // 3. Prioridad: semana seleccionada en Módulo 3
+  if (!semanaEvaluada && AppState.selectedModulo3Week && AppState.availableWeeks) {
     const w = AppState.availableWeeks.find(wk => wk.weekKey === AppState.selectedModulo3Week);
     if (w) semanaEvaluada = `${w.startDate} al ${w.endDate}`;
   }
+
+  // 4. Fallback de cortesía si no hay filtro de fechas
   if (!semanaEvaluada) {
-    const fromVal = document.getElementById('filterFrom')?.value || '';
-    const toVal = document.getElementById('filterTo')?.value || '';
-    if (fromVal && toVal) {
-      semanaEvaluada = `${fromVal} al ${toVal}`;
-    } else {
-      semanaEvaluada = 'recientemente evaluada';
-    }
+    semanaEvaluada = 'recientemente evaluada';
   }
 
   const pilotName = pilotData.pilot || pilotData.name || 'Conductor';
@@ -3056,6 +3102,8 @@ function openLlamadoModal(pilotData, type = 'cancelaciones') {
 function closeLlamadoModal() {
   const modal = document.getElementById('modalLlamadoAtencion');
   if (modal) modal.style.display = 'none';
+  const confirmBar = document.getElementById('llamadoConfirmBar');
+  if (confirmBar) confirmBar.style.display = 'none';
   _currentLlamadoData = null;
 }
 
@@ -3073,8 +3121,39 @@ function abrirWhatsAppLlamado() {
     return;
   }
 
-  const url = `https://wa.me/${rawPhone}?text=${encodeURIComponent(msg)}`;
-  window.open(url, '_blank');
+  // OPTIMIZACIÓN DIRECTA A WHATSAPP WEB:
+  // 1. Apuntar directamente a web.whatsapp.com/send para saltarse la pantalla intermedia de api.whatsapp.com/send
+  // 2. Reutilizar el target 'tada_whatsapp_web' para que no abra múltiples pestañas nuevas en cada piloto
+  const directWebUrl = `https://web.whatsapp.com/send?phone=${rawPhone}&text=${encodeURIComponent(msg)}`;
+  
+  // Abrir o reusar la pestaña de WhatsApp Web existente
+  window.open(directWebUrl, 'tada_whatsapp_web');
+
+  // Mostrar inmediatamente la barra de confirmación interactiva en el modal
+  const confirmBar = document.getElementById('llamadoConfirmBar');
+  if (confirmBar) {
+    confirmBar.style.display = 'flex';
+  }
+}
+
+function confirmarEstadoLlamado(status) {
+  if (!_currentLlamadoData) return;
+  const pilotKey = (_currentLlamadoData.pilot || _currentLlamadoData.name || '').trim().toLowerCase();
+  if (pilotKey) {
+    AppState.llamadosStatus = AppState.llamadosStatus || {};
+    AppState.llamadosStatus[pilotKey] = {
+      status, // 'sent' | 'failed'
+      timestamp: new Date().toISOString(),
+      pilotName: _currentLlamadoData.pilot || _currentLlamadoData.name
+    };
+  }
+
+  // Refrescar las tablas del módulo crítico para reflejar el nuevo estado visual
+  renderTop5StoreTable();
+  renderTop10GlobalTable();
+
+  // Cerrar el modal
+  closeLlamadoModal();
 }
 
 function copiarMensajeLlamado() {
