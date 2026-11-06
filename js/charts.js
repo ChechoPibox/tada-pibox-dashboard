@@ -640,9 +640,26 @@ const ChartManager = {
                 if (item.dataset.label.startsWith('—')) return null;
                 const val = item.raw;
                 const label = item.dataset.label;
+                const wd = weeklyData[item.dataIndex];
                 let badge = '';
                 if (label.includes('Asistencia')) badge = val >= 90 ? ' ✅' : ' ⚠️';
                 if (label.includes('Cancelación')) badge = val <= 8 ? ' ✅' : ' 🚨';
+                // Agregar cantidad absoluta según el indicador
+                if (label.includes('Asistencia') && wd) {
+                  const attended = wd.attendedCount ?? 0;
+                  const total    = wd.totalShifts  ?? 0;
+                  return ` ${label}: ${val}%${badge} (${attended} de ${total} turnos)`;
+                }
+                if (label.includes('Cancelación') && wd) {
+                  const cancels = wd.cancelCount  ?? 0;
+                  const total   = wd.totalShifts  ?? 0;
+                  return ` ${label}: ${val}%${badge} (${cancels} de ${total} turnos)`;
+                }
+                if (label.includes('Cobertura') && wd) {
+                  const covered   = wd.cuposCoveredCount   ?? 0;
+                  const evaluated = wd.cuposEvaluatedCount ?? 0;
+                  return ` ${label}: ${val}% (${covered} / ${evaluated} cupos)`;
+                }
                 return ` ${label}: ${val}%${badge}`;
               },
               afterBody: (items) => {
@@ -655,6 +672,12 @@ const ChartManager = {
                 if (cancel !== undefined) lines.push(cancel <= 8 ? '✅ Cancelación en rango aceptable (≤ 8%)' : '🚨 Cancelación SOBRE Límite (> 8%)');
                 if (rawItem && rawItem.cancellationNetRatePct != null) {
                   lines.push(`ℹ️ Tasa faltantes sin suplente: ${rawItem.cancellationNetRatePct.toFixed(1)}%`);
+                }
+                // Resumen absoluto al pie del tooltip
+                if (rawItem) {
+                  const missing = rawItem.missingCount ?? 0;
+                  lines.push(`── Turnos programados: ${rawItem.totalShifts ?? '—'}`);
+                  if (missing > 0) lines.push(`── Faltantes (sin suplente): ${missing}`);
                 }
                 return lines;
               }

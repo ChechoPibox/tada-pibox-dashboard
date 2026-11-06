@@ -619,7 +619,7 @@ async function initApp() {
     const meta = await TaDaDB.getMeta('last_sync');
 
     // Detectar caché obsoleto, incompleto o con esquema previo
-    const CACHE_VERSION = '2026-11-06-v96-temporal';
+    const CACHE_VERSION = '2026-11-06-v97-city-week-filter';
     const cachedVersion = await TaDaDB.getMeta('cache_version');
     const versionMismatch = cachedVersion !== CACHE_VERSION;
     const cachedCities = new Set(cachedMalla.map(r => r.city).filter(Boolean));
@@ -2243,11 +2243,11 @@ function renderModulo3Visuals() {
     if (!citySelect._hasCityListener) {
       citySelect._hasCityListener = true;
       citySelect.addEventListener('change', () => {
-        // Usar mallaShifts filtrado por ciudad/tienda del header (no por semana)
-        // para garantizar que TODAS las ciudades tengan datos suficientes en la vista global
+        // Filtrar por semana seleccionada Y ciudad/tienda del header para coherencia temporal
         const allMallaForCity = AppState.mallaShifts.filter(s => {
           if (city && s.city !== city) return false;
           if (store && s.store !== store) return false;
+          if (selectedWeek && !isDateInRangeWithNoonCut(s.date, selectedWeek.startDate, selectedWeek.endDate)) return false;
           return true;
         });
         ChartManager.renderCityStorePerformanceChart('chartCityStorePerformance', allMallaForCity, citySelect.value);
@@ -2256,13 +2256,15 @@ function renderModulo3Visuals() {
   }
 
   // Renderizar Gráfica 5: Desempeño Operativo por Ciudad y Tienda (Req 7)
-  // CORRECCIÓN ERROR 1: Usar AppState.mallaShifts (filtrado solo por ciudad/tienda del header,
-  // NO por semana seleccionada) para que TODAS las ciudades, incluida Cali, aparezcan en la vista global.
-  // La vista de semana es correcta para los otros gráficos, pero para el comparativo por ciudad
-  // necesitamos el histórico completo para que el gráfico tenga representatividad estadística.
+  // NOTA: Se filtra por la semana seleccionada (selectedWeek) Y por ciudad/tienda del header.
+  // Esto garantiza que solo aparezcan ciudades/tiendas con actividad real en el periodo visible.
+  // La corrección de Cali (mallaForCityChart) está preservada: se usa AppState.mallaShifts como base
+  // pero ahora se acota al rango de la semana seleccionada para coherencia temporal.
   const mallaForCityChart = AppState.mallaShifts.filter(s => {
     if (city && s.city !== city) return false;
     if (store && s.store !== store) return false;
+    // Filtrar por semana seleccionada para que solo aparezcan ciudades activas en ese periodo
+    if (selectedWeek && !isDateInRangeWithNoonCut(s.date, selectedWeek.startDate, selectedWeek.endDate)) return false;
     return true;
   });
   ChartManager.renderCityStorePerformanceChart('chartCityStorePerformance', mallaForCityChart, citySelect?.value || '');
