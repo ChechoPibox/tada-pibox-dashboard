@@ -609,6 +609,7 @@ async function initApp() {
   setupInTableSearch('escalafonTableSearch', 'tableTop10Global');
   setupUniversalTableSorting();
   initRiskTableControls();
+  initDualScrollbars();
 
   // 1. Inicializar base de datos IndexedDB
   try {
@@ -621,7 +622,7 @@ async function initApp() {
     const meta = await TaDaDB.getMeta('last_sync');
 
     // Detectar caché obsoleto, incompleto o con esquema previo
-    const CACHE_VERSION = '2026-11-06-v99-centralized-llamados-history';
+    const CACHE_VERSION = '2026-11-06-v100-dual-scroll-adaptive-tables';
     const cachedVersion = await TaDaDB.getMeta('cache_version');
     const versionMismatch = cachedVersion !== CACHE_VERSION;
     const cachedCities = new Set(cachedMalla.map(r => r.city).filter(Boolean));
@@ -2158,6 +2159,58 @@ function renderRiskTablePage() {
 }
 
 // Registrar eventos de paginación y filtros de la tabla histórica (inicialización única)
+
+// ============================================================
+// DUAL SYNCHRONIZED SCROLLBARS FOR TABLES (v100)
+// ============================================================
+function initDualScrollbars() {
+  const wrappers = document.querySelectorAll('.table-scroll-wrapper');
+  wrappers.forEach(wrapper => {
+    const top = wrapper.querySelector('.table-scroll-top');
+    const bottom = wrapper.querySelector('.table-scroll-bottom');
+    const topInner = wrapper.querySelector('.table-scroll-top-inner');
+    const table = wrapper.querySelector('table');
+    if (!top || !bottom || !table) return;
+
+    const syncWidth = () => {
+      if (topInner) {
+        topInner.style.width = table.scrollWidth + 'px';
+        if (table.scrollWidth <= bottom.clientWidth + 2) {
+          top.style.display = 'none';
+        } else {
+          top.style.display = 'block';
+        }
+      }
+    };
+
+    syncWidth();
+
+    let isSyncingTop = false;
+    let isSyncingBottom = false;
+
+    top.addEventListener('scroll', () => {
+      if (!isSyncingTop) {
+        isSyncingBottom = true;
+        bottom.scrollLeft = top.scrollLeft;
+      }
+      isSyncingTop = false;
+    }, { passive: true });
+
+    bottom.addEventListener('scroll', () => {
+      if (!isSyncingBottom) {
+        isSyncingTop = true;
+        top.scrollLeft = bottom.scrollLeft;
+      }
+      isSyncingBottom = false;
+    }, { passive: true });
+
+    if (window.ResizeObserver) {
+      new ResizeObserver(syncWidth).observe(table);
+      new ResizeObserver(syncWidth).observe(bottom);
+    }
+  });
+}
+
 function initRiskTableControls() {
   const onFilterChange = () => {
     AppState._riskTablePage = 1;
@@ -2396,6 +2449,7 @@ function renderModulo3Visuals() {
         `;
       }).join('');
       restoreTableSort(tableSummaryEl.closest('table'));
+      setTimeout(initDualScrollbars, 50);
     }
   }
 }
@@ -3687,6 +3741,7 @@ function selectPilotForProfile(pilotIdentifier) {
       `;
     }).join('');
     restoreTableSort(historyBody.closest('table'));
+    setTimeout(initDualScrollbars, 50);
   }
 
   if (AppState.activeTab !== 'pilotos') {

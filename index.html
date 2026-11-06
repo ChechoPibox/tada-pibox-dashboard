@@ -10,7 +10,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   
-  <link rel="stylesheet" href="./css/styles.css?v=20261023_v89">
+  <link rel="stylesheet" href="./css/styles.css?v=20261106_v100">
   <link rel="icon" href="./assets/logo_pibox_tada.jpg" type="image/jpeg">
 </head>
 <body>
@@ -784,26 +784,31 @@
             <div class="panel-title" style="font-size: 1rem;">📋 Resumen Operativo Semana a Semana</div>
             <div style="font-size: 0.8rem; color: var(--text-muted);" id="weeklyTableCityNote">Todas las ciudades</div>
           </div>
-          <div class="table-responsive">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th>Semana</th>
-                  <th>Rango de Fechas</th>
-                  <th>Turnos Requeridos</th>
-                  <th>Asistencia (%)</th>
-                  <th>Cancelación (%)</th>
-                  <th>Cobertura Cupos (%)</th>
-                  <th>Puntualidad (%)</th>
-                  <th>Paquetes Entregados</th>
-                  <th>Prod. Promedio</th>
-                  <th class="no-sort">Acción</th>
-                </tr>
-              </thead>
-              <tbody id="tableWeeklyHistoricalSummary">
+          <div class="table-scroll-wrapper" id="wrapperWeeklyHistorical">
+            <div class="table-scroll-top" id="scrollTopWeeklyHistorical">
+              <div class="table-scroll-top-inner"></div>
+            </div>
+            <div class="table-scroll-bottom table-responsive">
+              <table class="data-table" style="min-width: 820px;">
+                <thead>
+                  <tr>
+                    <th style="min-width:70px;white-space:nowrap;">Semana</th>
+                    <th style="min-width:160px;white-space:nowrap;">Rango de Fechas</th>
+                    <th style="min-width:90px;white-space:nowrap;">Turnos Req.</th>
+                    <th style="min-width:90px;white-space:nowrap;">Asistencia %</th>
+                    <th style="min-width:90px;white-space:nowrap;">Cancelación %</th>
+                    <th style="min-width:100px;white-space:nowrap;">Cob. Cupos %</th>
+                    <th style="min-width:90px;white-space:nowrap;">Puntualidad %</th>
+                    <th style="min-width:100px;white-space:nowrap;">Paquetes</th>
+                    <th style="min-width:90px;white-space:nowrap;">Prod. Prom.</th>
+                    <th class="no-sort" style="min-width:70px;white-space:nowrap;">Acción</th>
+                  </tr>
+                </thead>
+                <tbody id="tableWeeklyHistoricalSummary">
                 <!-- Generado dinámicamente -->
               </tbody>
             </table>
+          </div>
           </div>
         </div>
       </section>
@@ -873,25 +878,30 @@
         <div class="panel-header" style="margin-top: 24px;">
           <div class="panel-title">📜 Historial de Turnos (Últimas 3 Semanas)</div>
         </div>
-        <div class="table-responsive">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>Fecha</th>
-                <th>Tienda / Seller</th>
-                <th>Estado</th>
-                <th>Inicio</th>
-                <th>Llegada</th>
-                <th>Paquetes Reales</th>
-                <th>Meta Esperada</th>
-                <th>Evaluación</th>
-                <th>Contexto</th>
-              </tr>
-            </thead>
-            <tbody id="profileShiftHistory">
+                <div class="table-scroll-wrapper" id="wrapperProfileShiftHistory">
+          <div class="table-scroll-top" id="scrollTopProfileShift">
+            <div class="table-scroll-top-inner"></div>
+          </div>
+          <div class="table-scroll-bottom table-responsive">
+            <table class="data-table" style="min-width: 780px;">
+              <thead>
+                <tr>
+                  <th style="min-width:90px;white-space:nowrap;">Fecha</th>
+                  <th style="min-width:140px;white-space:nowrap;">Tienda / Seller</th>
+                  <th style="min-width:80px;white-space:nowrap;">Estado</th>
+                  <th style="min-width:70px;white-space:nowrap;">Inicio</th>
+                  <th style="min-width:70px;white-space:nowrap;">Llegada</th>
+                  <th style="min-width:80px;white-space:nowrap;">Paq. Reales</th>
+                  <th style="min-width:80px;white-space:nowrap;">Meta Esperada</th>
+                  <th style="min-width:80px;white-space:nowrap;">Evaluación</th>
+                  <th style="min-width:110px;white-space:nowrap;">Contexto</th>
+                </tr>
+              </thead>
+              <tbody id="profileShiftHistory">
               <!-- Generado dinámicamente -->
             </tbody>
           </table>
+        </div>
         </div>
       </section>
     </div>
@@ -1235,16 +1245,16 @@
   <script src="./js/vendor/chart.umd.min.js"></script>
 
   <!-- Módulos de la Aplicación -->
-  <script src="./js/config.js?v=20261106_v99"></script>
-  <script src="./js/productivity-matrix.js?v=20261106_v99"></script>
-  <script src="./js/rules.js?v=20261106_v99"></script>
-  <script src="./js/storage-db.js?v=20261106_v99"></script>
-  <script src="./js/sheets-service.js?v=20261106_v99"></script>
-  <script src="./js/coverage-engine.js?v=20261106_v99"></script>
-  <script src="./js/charts.js?v=20261106_v99"></script>
-  <script src="./js/data.js?v=20261106_v99"></script>
-  <script src="./js/llamados-service.js?v=20261106_v99"></script>
-  <script src="./js/app.js?v=20261106_v99"></script>
+  <script src="./js/config.js?v=20261106_v100"></script>
+  <script src="./js/productivity-matrix.js?v=20261106_v100"></script>
+  <script src="./js/rules.js?v=20261106_v100"></script>
+  <script src="./js/storage-db.js?v=20261106_v100"></script>
+  <script src="./js/sheets-service.js?v=20261106_v100"></script>
+  <script src="./js/coverage-engine.js?v=20261106_v100"></script>
+  <script src="./js/charts.js?v=20261106_v100"></script>
+  <script src="./js/data.js?v=20261106_v100"></script>
+  <script src="./js/llamados-service.js?v=20261106_v100"></script>
+  <script src="./js/app.js?v=20261106_v100"></script>
 </body>
 </html>
 

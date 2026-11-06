@@ -1459,13 +1459,67 @@ html {
 }
 
 /* ============================================================
-   DATA TABLES
+   DATA TABLES — Dual Scrollbar + Adaptive Columns (v100)
    ============================================================ */
+
+/* ---- Wrapper para scrollbar doble sincronizado ---- */
+.table-scroll-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+/* Scrollbar SUPERIOR (mirror del inferior) */
+.table-scroll-top {
+  overflow-x: auto;
+  overflow-y: hidden;
+  height: 14px;
+  margin-bottom: 2px;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  border: 1px solid var(--border-subtle);
+  border-bottom: none;
+  background: rgba(10, 13, 34, 0.6);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(124, 58, 237, 0.55) rgba(255,255,255,0.04);
+}
+.table-scroll-top::-webkit-scrollbar { height: 8px; }
+.table-scroll-top::-webkit-scrollbar-track { background: rgba(255,255,255,0.03); border-radius: 4px; }
+.table-scroll-top::-webkit-scrollbar-thumb { background: rgba(124, 58, 237, 0.55); border-radius: 4px; }
+.table-scroll-top::-webkit-scrollbar-thumb:hover { background: rgba(124, 58, 237, 0.85); }
+
+/* Div interno que da ancho al scrollbar superior */
+.table-scroll-top-inner {
+  height: 1px;
+  pointer-events: none;
+}
+
+/* Contenedor inferior (el real, con la tabla) */
+.table-scroll-bottom {
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(124, 58, 237, 0.45) rgba(255,255,255,0.04);
+}
+.table-scroll-bottom::-webkit-scrollbar { height: 8px; }
+.table-scroll-bottom::-webkit-scrollbar-track { background: rgba(255,255,255,0.03); border-radius: 4px; }
+.table-scroll-bottom::-webkit-scrollbar-thumb { background: rgba(124, 58, 237, 0.45); border-radius: 4px; }
+.table-scroll-bottom::-webkit-scrollbar-thumb:hover { background: rgba(124, 58, 237, 0.80); }
+
+/* Mantiene el borde original del table-responsive */
 .table-responsive {
   width: 100%;
   overflow-x: auto;
   border-radius: var(--radius-md);
   border: 1px solid var(--border-subtle);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(124, 58, 237, 0.45) rgba(255,255,255,0.04);
+}
+.table-responsive::-webkit-scrollbar { height: 8px; }
+.table-responsive::-webkit-scrollbar-track { background: rgba(255,255,255,0.03); }
+.table-responsive::-webkit-scrollbar-thumb { background: rgba(124, 58, 237, 0.45); border-radius: 4px; }
+
+/* Cuando table-scroll-bottom tiene también table-responsive, hereda borde */
+.table-scroll-bottom.table-responsive {
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
 }
 
 .data-table {
