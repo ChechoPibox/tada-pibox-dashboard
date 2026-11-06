@@ -621,11 +621,16 @@ async function initApp() {
     const meta = await TaDaDB.getMeta('last_sync');
 
     // Detectar caché obsoleto, incompleto o con esquema previo
-    const CACHE_VERSION = '2026-11-06-v98-llamados-sync-wa-direct';
+    const CACHE_VERSION = '2026-11-06-v99-centralized-llamados-history';
     const cachedVersion = await TaDaDB.getMeta('cache_version');
     const versionMismatch = cachedVersion !== CACHE_VERSION;
     const cachedCities = new Set(cachedMalla.map(r => r.city).filter(Boolean));
     const cacheIsStale = cachedMalla.length > 0 && (cachedCities.size < 4 || cachedMalla.length < 3000 || versionMismatch);
+
+    // Cargar y sincronizar el historial centralizado de llamados de atención
+    if (typeof LlamadosSyncService !== 'undefined') {
+      await LlamadosSyncService.loadAll();
+    }
 
     if (cachedMalla.length > 0 && cachedProg.length > 0 && !cacheIsStale) {
       refreshProductivityMatches(cachedMalla);
@@ -911,6 +916,16 @@ function setupEventListeners() {
   });
   document.getElementById('btnExportCriticalRanking')?.addEventListener('click', exportCriticalRankingCsv);
   document.getElementById('btnExportEscalafonGlobal')?.addEventListener('click', exportEscalafonGlobalCsv);
+  document.getElementById('btnOpenLlamadosHistory')?.addEventListener('click', openLlamadosHistoryModal);
+
+  // Listeners para filtros de la bitácora histórica
+  ['historySearchQuery', 'historyFilterSemana', 'historyFilterStatus', 'historyFilterMotivo'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener('input', renderLlamadosHistoryTable);
+      el.addEventListener('change', renderLlamadosHistoryTable);
+    }
+  });
 
   // Selector rápido de Semana Operativa (Estrictamente Lunes a Domingo, 7 días exactos con corte a las 12:00 PM)
   document.getElementById('filterSemana')?.addEventListener('change', (e) => {
@@ -2614,6 +2629,12 @@ function renderTop5StoreTable() {
     if (llamadoInfo?.status === 'sent') {
       llamadoBtnBadge = '✅ Enviado';
       llamadoBtnStyle = 'border-color:rgba(16,185,129,0.5);color:#34d399;background:rgba(16,185,129,0.12);';
+    } else if (llamadoInfo?.status === 'pending') {
+      llamadoBtnBadge = '🟡 Pendiente';
+      llamadoBtnStyle = 'border-color:rgba(245,158,11,0.5);color:#fbbf24;background:rgba(245,158,11,0.12);';
+    } else if (llamadoInfo?.status === 'not_applicable') {
+      llamadoBtnBadge = '⚪ No Aplica';
+      llamadoBtnStyle = 'border-color:rgba(148,163,184,0.4);color:#94a3b8;background:rgba(148,163,184,0.10);';
     } else if (llamadoInfo?.status === 'failed') {
       llamadoBtnBadge = '❌ Fallido';
       llamadoBtnStyle = 'border-color:rgba(239,68,68,0.6);color:#ef4444;background:rgba(239,68,68,0.12);';
@@ -2693,6 +2714,12 @@ function renderTop10GlobalTable() {
     if (llamadoInfo?.status === 'sent') {
       llamadoBtnBadge = '✅ Enviado';
       llamadoBtnStyle = 'border-color:rgba(16,185,129,0.5);color:#34d399;background:rgba(16,185,129,0.12);';
+    } else if (llamadoInfo?.status === 'pending') {
+      llamadoBtnBadge = '🟡 Pendiente';
+      llamadoBtnStyle = 'border-color:rgba(245,158,11,0.5);color:#fbbf24;background:rgba(245,158,11,0.12);';
+    } else if (llamadoInfo?.status === 'not_applicable') {
+      llamadoBtnBadge = '⚪ No Aplica';
+      llamadoBtnStyle = 'border-color:rgba(148,163,184,0.4);color:#94a3b8;background:rgba(148,163,184,0.10);';
     } else if (llamadoInfo?.status === 'failed') {
       llamadoBtnBadge = '❌ Fallido';
       llamadoBtnStyle = 'border-color:rgba(239,68,68,0.6);color:#ef4444;background:rgba(239,68,68,0.12);';
@@ -3076,6 +3103,14 @@ function openLlamadoModal(pilotData, type = 'cancelaciones') {
       `¡Contamos con tu compromiso y dedicación! 🏍️📦`;
   }
 
+  // Guardar en _currentLlamadoData todos los datos estructurados para el registro histórico
+  _currentLlamadoData.semana = semanaEvaluada;
+  _currentLlamadoData.pilotName = pilotName;
+  _currentLlamadoData.stores = stores;
+  _currentLlamadoData.city = pilotData.city || '—';
+  _currentLlamadoData.pilotId = pilotData.pilot_id || '—';
+  _currentLlamadoData.generatedMessage = msg;
+
   // Llenar campos en el modal
   const nameEl = document.getElementById('llamadoPilotName');
   if (nameEl) nameEl.innerText = pilotName;
@@ -3095,6 +3130,18 @@ function openLlamadoModal(pilotData, type = 'cancelaciones') {
 
   const previewEl = document.getElementById('llamadoMensajePreview');
   if (previewEl) previewEl.value = msg;
+
+  // Actualizar operador actual en la barra de confirmación
+  const opNameEl = document.getElementById('llamadoOperadorName');
+  if (opNameEl && typeof LlamadosSyncService !== 'undefined') {
+    opNameEl.innerText = LlamadosSyncService.getCurrentUser();
+  }
+
+  // Restablecer valores de inputs de confirmación
+  const selectEstado = document.getElementById('llamadoSelectEstado');
+  if (selectEstado) selectEstado.value = 'sent';
+  const inputNotas = document.getElementById('llamadoInputNotas');
+  if (inputNotas) inputNotas.value = '';
 
   modal.style.display = 'flex';
 }
@@ -3136,24 +3183,55 @@ function abrirWhatsAppLlamado() {
   }
 }
 
-function confirmarEstadoLlamado(status) {
+/**
+ * Guarda la gestión en la Base de Datos Centralizada / IndexedDB con trazabilidad completa
+ */
+async function guardarGestionLlamado() {
   if (!_currentLlamadoData) return;
-  const pilotKey = (_currentLlamadoData.pilot || _currentLlamadoData.name || '').trim().toLowerCase();
-  if (pilotKey) {
-    AppState.llamadosStatus = AppState.llamadosStatus || {};
-    AppState.llamadosStatus[pilotKey] = {
-      status, // 'sent' | 'failed'
-      timestamp: new Date().toISOString(),
-      pilotName: _currentLlamadoData.pilot || _currentLlamadoData.name
+
+  const selectEstado = document.getElementById('llamadoSelectEstado');
+  const inputNotas = document.getElementById('llamadoInputNotas');
+  const previewEl = document.getElementById('llamadoMensajePreview');
+
+  const status = selectEstado ? selectEstado.value : 'sent';
+  const notes = inputNotas ? inputNotas.value.trim() : '';
+  const message = previewEl ? previewEl.value : (_currentLlamadoData.generatedMessage || '');
+
+  try {
+    if (typeof LlamadosSyncService !== 'undefined') {
+      await LlamadosSyncService.registerLlamado({
+        pilot: _currentLlamadoData.pilotName || _currentLlamadoData.pilot,
+        pilotId: _currentLlamadoData.pilotId || _currentLlamadoData.pilot_id,
+        phone: _currentLlamadoData.phone,
+        city: _currentLlamadoData.city,
+        store: _currentLlamadoData.stores || _currentLlamadoData.store,
+        semana: _currentLlamadoData.semana,
+        type: _currentLlamadoData.type,
+        message,
+        status,
+        notes
+      });
+    }
+
+    // Refrescar las tablas del módulo crítico para reflejar el nuevo estado visual
+    renderTop5StoreTable();
+    renderTop10GlobalTable();
+
+    // Notificación discreta
+    const statusLabels = {
+      'sent': '✅ Mensaje registrado como Enviado',
+      'pending': '🟡 Registrado como Pendiente de Envío',
+      'not_applicable': '⚪ Registrado como No Aplica / Justificado',
+      'failed': '❌ Registrado como Fallido'
     };
+    alert(statusLabels[status] || 'Registro guardado exitosamente en base de datos.');
+
+    // Cerrar el modal
+    closeLlamadoModal();
+  } catch (err) {
+    console.error('Error guardando llamado de atención:', err);
+    alert('Ocurrió un error guardando el registro: ' + err.message);
   }
-
-  // Refrescar las tablas del módulo crítico para reflejar el nuevo estado visual
-  renderTop5StoreTable();
-  renderTop10GlobalTable();
-
-  // Cerrar el modal
-  closeLlamadoModal();
 }
 
 function copiarMensajeLlamado() {
@@ -3192,6 +3270,278 @@ function openLlamadoModalFromRanking(index, source) {
 
   const type = (pilot.cancels && pilot.cancels > 0) ? 'cancelaciones' : 'productividad';
   openLlamadoModal(pilot, type);
+}
+
+// ============================================================
+// BITÁCORA Y HISTORIAL CENTRALIZADO DE LLAMADOS DE ATENCIÓN
+// ============================================================
+
+async function openLlamadosHistoryModal() {
+  const modal = document.getElementById('modalLlamadosHistory');
+  if (!modal) return;
+
+  // Actualizar indicador de Supabase / Local
+  const dbTypeBadge = document.getElementById('historyStorageTypeBadge');
+  const syncBadge = document.getElementById('historySyncStatusBadge');
+  if (typeof LlamadosSyncService !== 'undefined') {
+    if (LlamadosSyncService.isSupabaseConfigured()) {
+      if (dbTypeBadge) dbTypeBadge.innerText = '☁️ Supabase Cloud (Centralizado)';
+      if (syncBadge) {
+        syncBadge.innerText = '☁️ Nube Activa';
+        syncBadge.className = 'pill pill-good';
+      }
+    } else {
+      if (dbTypeBadge) dbTypeBadge.innerText = '💾 IndexedDB (Local en este navegador)';
+      if (syncBadge) {
+        syncBadge.innerText = '💾 Almacenamiento Local';
+        syncBadge.className = 'pill pill-warn';
+      }
+    }
+
+    // Cargar datos sincronizados
+    await LlamadosSyncService.loadAll();
+  }
+
+  // Poblar el selector de semanas únicas presentes en el historial
+  populateHistorySemanaFilter();
+
+  // Renderizar la tabla de registros
+  renderLlamadosHistoryTable();
+
+  modal.style.display = 'flex';
+}
+
+function closeLlamadosHistoryModal() {
+  const modal = document.getElementById('modalLlamadosHistory');
+  if (modal) modal.style.display = 'none';
+}
+
+function populateHistorySemanaFilter() {
+  const select = document.getElementById('historyFilterSemana');
+  if (!select || typeof LlamadosSyncService === 'undefined') return;
+
+  const currentVal = select.value;
+  const semanas = [...new Set(LlamadosSyncService.records.map(r => r.semana).filter(Boolean))].sort();
+
+  select.innerHTML = '<option value="">Todas las semanas</option>' +
+    semanas.map(s => `<option value="${escapeHtml(s)}"${s === currentVal ? ' selected' : ''}>${escapeHtml(s)}</option>`).join('');
+}
+
+function renderLlamadosHistoryTable() {
+  const tbody = document.getElementById('tableLlamadosHistoryBody');
+  const countEl = document.getElementById('historyCountSummary');
+  if (!tbody || typeof LlamadosSyncService === 'undefined') return;
+
+  const query = document.getElementById('historySearchQuery')?.value || '';
+  const semana = document.getElementById('historyFilterSemana')?.value || '';
+  const status = document.getElementById('historyFilterStatus')?.value || '';
+  const motivo = document.getElementById('historyFilterMotivo')?.value || '';
+
+  const records = LlamadosSyncService.filterRecords({ query, semana, status, motivo });
+
+  if (countEl) {
+    countEl.innerText = `Total de registros: ${records.length} (de ${LlamadosSyncService.records.length} en base de datos)`;
+  }
+
+  if (records.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="8" style="text-align:center; padding:32px; color:var(--text-dim);">
+          No se encontraron registros de llamados de atención para los filtros seleccionados.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  const statusBadge = (st) => {
+    switch (st) {
+      case 'sent':
+        return '<span class="pill pill-good" style="font-weight:700;">✅ Enviado</span>';
+      case 'pending':
+        return '<span class="pill pill-warn" style="font-weight:700;">🟡 Pendiente</span>';
+      case 'not_applicable':
+        return '<span class="pill pill-neutral" style="font-weight:700;">⚪ No Aplica</span>';
+      case 'failed':
+        return '<span class="pill pill-bad" style="font-weight:700;">❌ Fallido</span>';
+      default:
+        return `<span class="pill pill-neutral">${escapeHtml(st)}</span>`;
+    }
+  };
+
+  tbody.innerHTML = records.map(r => {
+    const dateFormatted = r.timestamp ? new Date(r.timestamp).toLocaleString('es-CO', {
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit'
+    }) : '—';
+
+    return `
+      <tr>
+        <td style="white-space:nowrap; color:var(--text-muted); font-size:0.75rem;">${dateFormatted}</td>
+        <td>
+          <div style="font-weight:700; color:#fff;">${escapeHtml(r.pilotName)}</div>
+          <div style="font-size:0.72rem; color:var(--text-muted);">ID: ${escapeHtml(r.pilotId)} · Tel: ${escapeHtml(r.phone)}</div>
+        </td>
+        <td>
+          <div style="font-weight:600; color:var(--text-main);">${escapeHtml(r.city)}</div>
+          <div style="font-size:0.72rem; color:var(--text-muted); max-width:140px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${escapeHtml(r.store)}">${escapeHtml(r.store)}</div>
+        </td>
+        <td><span class="pill pill-neutral" style="font-size:0.75rem;">${escapeHtml(r.semana)}</span></td>
+        <td>
+          ${r.type === 'cancelaciones'
+            ? '<span class="pill pill-bad" style="font-size:0.72rem;">⚠️ Cancelaciones</span>'
+            : '<span class="pill pill-warn" style="font-size:0.72rem;">📊 Productividad</span>'
+          }
+        </td>
+        <td style="text-align:center;">${statusBadge(r.status)}</td>
+        <td>
+          <div style="font-weight:600; color:#fff;">${escapeHtml(r.user)}</div>
+          ${r.notes ? `<div style="font-size:0.72rem; color:var(--text-dim); max-width:140px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${escapeHtml(r.notes)}">Obs: ${escapeHtml(r.notes)}</div>` : ''}
+        </td>
+        <td style="text-align:center;">
+          <div style="display:flex; gap:4px; justify-content:center;">
+            <button onclick="verDetalleLlamado('${r.id}')" class="btn btn-secondary btn-sm" style="padding:3px 8px; font-size:0.72rem;" title="Ver mensaje y detalles completos">
+              👁️ Ver
+            </button>
+            <button onclick="cambiarEstadoLlamadoDirecto('${r.id}')" class="btn btn-secondary btn-sm" style="padding:3px 6px; font-size:0.72rem;" title="Cambiar estado de gestión">
+              ⚙️
+            </button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function verDetalleLlamado(id) {
+  if (typeof LlamadosSyncService === 'undefined') return;
+  const record = LlamadosSyncService.records.find(r => r.id === id);
+  if (!record) return;
+
+  const contentEl = document.getElementById('llamadoDetailContent');
+  if (!contentEl) return;
+
+  const dateFormatted = record.timestamp ? new Date(record.timestamp).toLocaleString('es-CO') : '—';
+
+  contentEl.innerHTML = `
+    <div style="background:rgba(255,255,255,0.04); padding:12px 16px; border-radius:10px; border:1px solid rgba(255,255,255,0.08); display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+      <div><span style="color:var(--text-muted);">Piloto:</span> <strong style="color:#fff;">${escapeHtml(record.pilotName)}</strong></div>
+      <div><span style="color:var(--text-muted);">Cédula/ID:</span> <strong style="color:#fff;">${escapeHtml(record.pilotId)}</strong></div>
+      <div><span style="color:var(--text-muted);">Ciudad / Tienda:</span> ${escapeHtml(record.city)} · ${escapeHtml(record.store)}</div>
+      <div><span style="color:var(--text-muted);">Teléfono:</span> ${escapeHtml(record.phone)}</div>
+      <div><span style="color:var(--text-muted);">Semana Operativa:</span> <strong>${escapeHtml(record.semana)}</strong></div>
+      <div><span style="color:var(--text-muted);">Responsable:</span> <strong style="color:var(--violet);">${escapeHtml(record.user)}</strong></div>
+      <div><span style="color:var(--text-muted);">Fecha y Hora:</span> ${dateFormatted}</div>
+      <div><span style="color:var(--text-muted);">Identificador Único:</span> <code style="font-size:0.75rem; color:#93c5fd;">${record.id}</code></div>
+    </div>
+
+    <div>
+      <div style="font-weight:700; color:var(--text-muted); margin-bottom:6px; text-transform:uppercase; font-size:0.75rem;">Mensaje Enviado al Piloto:</div>
+      <textarea readonly style="width:100%; min-height:160px; background:rgba(0,0,0,0.35); border:1px solid rgba(255,255,255,0.1); border-radius:8px; padding:10px; font-size:0.8rem; color:#e2e8f0; line-height:1.5;">${escapeHtml(record.message)}</textarea>
+    </div>
+
+    ${record.notes ? `
+      <div>
+        <div style="font-weight:700; color:var(--text-muted); margin-bottom:4px; font-size:0.75rem;">Notas u Observaciones del Coordinador:</div>
+        <div style="background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.25); border-radius:8px; padding:10px 14px; color:#fde68a;">${escapeHtml(record.notes)}</div>
+      </div>
+    ` : ''}
+
+    <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:8px;">
+      <button onclick="closeLlamadoDetailModal()" class="btn btn-secondary">Cerrar</button>
+    </div>
+  `;
+
+  document.getElementById('modalLlamadoDetail').style.display = 'flex';
+}
+
+function closeLlamadoDetailModal() {
+  const modal = document.getElementById('modalLlamadoDetail');
+  if (modal) modal.style.display = 'none';
+}
+
+async function cambiarEstadoLlamadoDirecto(id) {
+  if (typeof LlamadosSyncService === 'undefined') return;
+  const record = LlamadosSyncService.records.find(r => r.id === id);
+  if (!record) return;
+
+  const nuevo = prompt(
+    `Cambiar estado para ${record.pilotName}:\n\n` +
+    `Escribe una de las siguientes opciones:\n` +
+    `1 = Enviado\n` +
+    `2 = Pendiente\n` +
+    `3 = No Aplica\n` +
+    `4 = Fallido\n\n` +
+    `Estado actual: ${record.status}`,
+    '1'
+  );
+
+  if (!nuevo) return;
+
+  const map = {
+    '1': 'sent', 'enviado': 'sent',
+    '2': 'pending', 'pendiente': 'pending',
+    '3': 'not_applicable', 'no aplica': 'not_applicable',
+    '4': 'failed', 'fallido': 'failed'
+  };
+
+  const statusKey = map[nuevo.trim().toLowerCase()];
+  if (!statusKey) {
+    alert('Opción no válida.');
+    return;
+  }
+
+  const notas = prompt('Observación para este cambio de estado (opcional):', record.notes || '');
+
+  await LlamadosSyncService.updateStatus(id, statusKey, notas);
+  renderLlamadosHistoryTable();
+  renderTop5StoreTable();
+  renderTop10GlobalTable();
+}
+
+function exportarHistorialLlamadosCsv() {
+  if (typeof LlamadosSyncService === 'undefined' || LlamadosSyncService.records.length === 0) {
+    alert('No hay registros en la bitácora para exportar.');
+    return;
+  }
+
+  const headers = [
+    'ID Registro',
+    'Fecha y Hora',
+    'Piloto',
+    'Cédula / ID',
+    'Teléfono',
+    'Ciudad',
+    'Tienda',
+    'Semana Operativa',
+    'Motivo',
+    'Estado',
+    'Usuario Responsable',
+    'Notas',
+    'Mensaje'
+  ];
+
+  const rows = LlamadosSyncService.records.map(r => [
+    `"${r.id}"`,
+    `"${r.timestamp || ''}"`,
+    `"${(r.pilotName || '').replace(/"/g, '""')}"`,
+    `"${(r.pilotId || '').replace(/"/g, '""')}"`,
+    `"${r.phone || ''}"`,
+    `"${r.city || ''}"`,
+    `"${(r.store || '').replace(/"/g, '""')}"`,
+    `"${(r.semana || '').replace(/"/g, '""')}"`,
+    `"${r.type || ''}"`,
+    `"${r.status || ''}"`,
+    `"${(r.user || '').replace(/"/g, '""')}"`,
+    `"${(r.notes || '').replace(/"/g, '""')}"`,
+    `"${(r.message || '').replace(/"/g, '""').replace(/\n/g, ' ')}"`
+  ].join(','));
+
+  const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\r\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const filename = `Bitacora_Llamados_Atencion_${new Date().toISOString().substring(0, 10)}.csv`;
+
+  downloadBlob(blob, filename);
 }
 
 // ============================================================
@@ -3401,8 +3751,25 @@ function setupConfigModal() {
     APP_CONFIG.prodThresholdAcceptable = parseFloat(document.getElementById('cfgProdAcceptable')?.value) || 90.0;
     APP_CONFIG.prodThresholdLow = parseFloat(document.getElementById('cfgProdLow')?.value) || 75.0;
 
+    // Configuración de Supabase y Operador
+    APP_CONFIG.supabaseUrl = (document.getElementById('cfgSupabaseUrl')?.value || '').trim();
+    APP_CONFIG.supabaseKey = (document.getElementById('cfgSupabaseKey')?.value || '').trim();
+    const currentUser = (document.getElementById('cfgCurrentUser')?.value || '').trim();
+    if (currentUser && typeof LlamadosSyncService !== 'undefined') {
+      LlamadosSyncService.setCurrentUser(currentUser);
+    }
+
     saveConfig(APP_CONFIG);
     modal.classList.remove('active');
+    
+    // Si se configuró Supabase, intentar sincronizar de inmediato
+    if (typeof LlamadosSyncService !== 'undefined') {
+      LlamadosSyncService.loadAll().then(() => {
+        renderTop5StoreTable();
+        renderTop10GlobalTable();
+      });
+    }
+
     applyFilters();
   });
 }
@@ -3429,6 +3796,13 @@ function populateConfigForm() {
   if (document.getElementById('cfgProdProductive')) document.getElementById('cfgProdProductive').value = APP_CONFIG.prodThresholdProductive ?? 95.0;
   if (document.getElementById('cfgProdAcceptable')) document.getElementById('cfgProdAcceptable').value = APP_CONFIG.prodThresholdAcceptable ?? 90.0;
   if (document.getElementById('cfgProdLow')) document.getElementById('cfgProdLow').value = APP_CONFIG.prodThresholdLow ?? 75.0;
+
+  // Cargar configuración de Supabase y Operador
+  if (document.getElementById('cfgSupabaseUrl')) document.getElementById('cfgSupabaseUrl').value = APP_CONFIG.supabaseUrl || '';
+  if (document.getElementById('cfgSupabaseKey')) document.getElementById('cfgSupabaseKey').value = APP_CONFIG.supabaseKey || '';
+  if (document.getElementById('cfgCurrentUser')) {
+    document.getElementById('cfgCurrentUser').value = (typeof LlamadosSyncService !== 'undefined') ? LlamadosSyncService.getCurrentUser() : '';
+  }
 }
 
 // Exportación CSV General (header)

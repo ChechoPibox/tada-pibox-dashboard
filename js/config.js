@@ -38,14 +38,15 @@ const DEFAULT_CONFIG = {
   // Si el piloto supera este % de cancelación en 3 semanas, se activa la alerta 🚨 Alto Riesgo
   riskCancelThreshold: 10,
 
-  // Nuevos Rangos de Evaluación de Productividad por Turno (Match Compuesto)
-  // 🟢 Productivo: > 95.0%
-  // 🟡 Productividad Aceptable: 90.0% - 94.99%
-  // 🟠 Productividad Baja: 75.0% - 89.99%
-  // 🔴 Improductivo: < 74.99%
+  // Umbrales de evaluación de productividad por turno (Match Compuesto)
   prodThresholdProductive: 95.0,
   prodThresholdAcceptable: 90.0,
-  prodThresholdLow: 75.0
+  prodThresholdLow: 75.0,
+
+  // Configuración de Supabase para trazabilidad e historial centralizado multi-usuario
+  supabaseUrl: '',
+  supabaseKey: '',
+  supabaseTable: 'llamados_atencion'
 };
 
 // Cargar configuración de localStorage o usar defaults

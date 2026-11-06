@@ -5,7 +5,7 @@
 
 const TaDaDB = {
   dbName: 'TaDaPiboxOperationsDB',
-  version: 1,
+  version: 2,
   db: null,
 
   async open() {
@@ -38,6 +38,15 @@ const TaDaDB = {
         // Store para metadatos y estado de sincronización
         if (!db.objectStoreNames.contains('app_meta')) {
           db.createObjectStore('app_meta', { keyPath: 'key' });
+        }
+
+        // Store para historial permanente de llamados de atención
+        if (!db.objectStoreNames.contains('llamados_historial')) {
+          const llamadosStore = db.createObjectStore('llamados_historial', { keyPath: 'id' });
+          llamadosStore.createIndex('pilotKey', 'pilotKey', { unique: false });
+          llamadosStore.createIndex('semana', 'semana', { unique: false });
+          llamadosStore.createIndex('status', 'status', { unique: false });
+          llamadosStore.createIndex('timestamp', 'timestamp', { unique: false });
         }
       };
 
@@ -126,12 +135,48 @@ const TaDaDB = {
   },
 
   /**
-   * Limpia TODOS los stores de IndexedDB.
-   * Usar cuando se detecta caché obsoleto (ej: datos de una sola ciudad con el GID incorrecto).
+   * Operaciones para Historial de Llamados de Atención
+   */
+  async saveLlamado(llamado) {
+    const db = await this.open();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('llamados_historial', 'readwrite');
+      const store = tx.objectStore('llamados_historial');
+      store.put(llamado);
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = (e) => reject(e.target.error);
+    });
+  },
+
+  async getAllLlamados() {
+    const db = await this.open();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('llamados_historial', 'readonly');
+      const store = tx.objectStore('llamados_historial');
+      const request = store.getAll();
+      request.onsuccess = () => resolve(request.result || []);
+      request.onerror = (e) => reject(e.target.error);
+    });
+  },
+
+  async deleteLlamado(id) {
+    const db = await this.open();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('llamados_historial', 'readwrite');
+      const store = tx.objectStore('llamados_historial');
+      store.delete(id);
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = (e) => reject(e.target.error);
+    });
+  },
+
+  /**
+   * Limpia stores de datos operativos (conserva app_meta y llamados_historial para no perder trazabilidad).
    */
   async clearAll() {
     const db = await this.open();
-    const storeNames = ['malla_shifts', 'programacion_shifts', 'app_meta'];
+    // Limpia únicamente las tablas operativas descargadas de Sheets, protegiendo los llamados y config
+    const storeNames = ['malla_shifts', 'programacion_shifts'];
     const promises = storeNames.map(storeName => {
       return new Promise((resolve, reject) => {
         const tx = db.transaction(storeName, 'readwrite');
