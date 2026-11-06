@@ -934,9 +934,9 @@ const ChartManager = {
   },
 
   // ============================================================
-  // 7. Gráfico Comparativo: Mes Actual vs. Mes Anterior (Corte equivalente mismo día) (Req 8 & Req 9)
+  // 7. Gráfico Comparativo: Mes Actual vs. Mes Anterior — Dual-modo checkboxes (Req 8 & Req 9)
   // ============================================================
-  renderMonthVsPreviousMonthChart(canvasId, mallaShifts) {
+  renderMonthVsPreviousMonthChart(canvasId, mallaShifts, currentPeriod) {
     const ctx = document.getElementById(canvasId);
     if (!ctx) return;
     if (this.instances[canvasId]) this.instances[canvasId].destroy();
@@ -946,97 +946,96 @@ const ChartManager = {
       return;
     }
 
-    // ── LEER PERÍODO SELECCIONADO POR EL USUARIO ──────────────────────────────
-    // 1. Selector de modo específico del componente (si existe en index.html)
-    const modeSelect = document.getElementById('chartMonthVsMonthPeriodSelect');
-    const selectedMode = modeSelect ? modeSelect.value : 'auto';
-
-    // 2. Filtros globales del encabezado
-    const filterFromEl = document.getElementById('filterFrom');
-    const filterToEl   = document.getElementById('filterTo');
-    const userFrom = filterFromEl?.value?.trim() || '';  // YYYY-MM-DD o vacío
-    const userTo   = filterToEl?.value?.trim()   || '';  // YYYY-MM-DD o vacío
-
-    let currentStart = '';
-    let currentEnd = '';
-    let prevStart = '';
-    let prevEnd = '';
-    let currLabel = '';
-    let prevLabel = '';
-    let comparisonSubtitle = '';
-
     const monthNames = ['', 'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
-    // Manejo de modos explícitos configurados por el usuario
-    if (selectedMode === 'oct_vs_sep') {
-      currentStart = '2026-10-01'; currentEnd = '2026-10-31';
-      prevStart    = '2026-09-01'; prevEnd    = '2026-09-30';
-      currLabel = 'Oct 2026 (Mes Completo)';
-      prevLabel = 'Sep 2026 (Mes Completo)';
-      comparisonSubtitle = 'Octubre 2026 (1–31) vs. Septiembre 2026 (1–30)';
-    } else if (selectedMode === 'sep_vs_ago') {
-      currentStart = '2026-09-01'; currentEnd = '2026-09-30';
-      prevStart    = '2026-08-01'; prevEnd    = '2026-08-31';
-      currLabel = 'Sep 2026 (Mes Completo)';
-      prevLabel = 'Ago 2026 (Mes Completo)';
-      comparisonSubtitle = 'Septiembre 2026 (1–30) vs. Agosto 2026 (1–31)';
-    } else if (selectedMode === 'ago_vs_jul') {
-      currentStart = '2026-08-01'; currentEnd = '2026-08-31';
-      prevStart    = '2026-07-01'; prevEnd    = '2026-07-31';
-      currLabel = 'Ago 2026 (Mes Completo)';
-      prevLabel = 'Jul 2026 (Mes Completo)';
-      comparisonSubtitle = 'Agosto 2026 (1–31) vs. Julio 2026 (1–31)';
+    // ── MODO ACTIVO: leer checkboxes (mutuamente excluyentes) ─────────────────
+    const chkSameDays  = document.getElementById('chkSameDays');
+    const chkFullMonth = document.getElementById('chkFullMonth');
+    // Si ninguno marcado, forzar chkSameDays
+    const modeFullMonth = chkFullMonth?.checked && !chkSameDays?.checked;
+
+    // ── DETERMINAR currentStart / currentEnd ─────────────────────────────────
+    // Prioridad: 1) currentPeriod pasado por app.js  2) filterFrom/filterTo  3) semana seleccionada módulo 3  4) default
+    let currentStart = '';
+    let currentEnd   = '';
+
+    if (currentPeriod?.startDate && currentPeriod?.endDate) {
+      currentStart = currentPeriod.startDate;
+      currentEnd   = currentPeriod.endDate;
     } else {
-      // MODO AUTO:
-      // (a) Si hay filtro desde/hasta en el encabezado
+      const userFrom = document.getElementById('filterFrom')?.value?.trim() || '';
+      const userTo   = document.getElementById('filterTo')?.value?.trim()   || '';
       if (userFrom && userTo) {
         currentStart = userFrom;
         currentEnd   = userTo;
-      } else if (userFrom && !userTo) {
+      } else if (userFrom) {
         currentStart = userFrom;
         let maxD = userFrom;
         mallaShifts.forEach(s => { if (s.date && s.date >= userFrom && s.date > maxD) maxD = s.date; });
         currentEnd = maxD;
-      } else if (!userFrom && userTo) {
+      } else if (userTo) {
         currentEnd = userTo;
         const [y, m] = userTo.split('-').map(Number);
         currentStart = `${y}-${String(m).padStart(2, '0')}-01`;
       } else if (typeof AppState !== 'undefined' && AppState.selectedModulo3Week && AppState.availableWeeks?.length) {
-        // (b) Si hay una semana seleccionada en Módulo 3
         const wk = AppState.availableWeeks.find(w => w.weekKey === AppState.selectedModulo3Week);
-        if (wk) {
-          currentStart = wk.startDate;
-          currentEnd   = wk.endDate;
-        }
-      }
-
-      // (c) Si sigue sin rango, usar el mes más reciente con datos completos (Octubre 2026)
-      if (!currentStart || !currentEnd) {
-        currentStart = '2026-10-01';
-        currentEnd   = '2026-10-31';
-        prevStart    = '2026-09-01';
-        prevEnd      = '2026-09-30';
-        currLabel    = 'Oct 2026 (Mes Completo)';
-        prevLabel    = 'Sep 2026 (Mes Completo)';
-        comparisonSubtitle = 'Octubre 2026 (1–31) vs. Septiembre 2026 (1–30)';
+        if (wk) { currentStart = wk.startDate; currentEnd = wk.endDate; }
       }
     }
 
-    // Calcular período equivalente anterior si aún no está asignado
-    if (!prevStart || !prevEnd) {
-      const [cy1, cm1, cd1] = currentStart.split('-').map(Number);
-      const [cy2, cm2, cd2] = currentEnd.split('-').map(Number);
+    // Default: mes completo más reciente con datos
+    if (!currentStart || !currentEnd) {
+      currentStart = '2026-10-01';
+      currentEnd   = '2026-10-31';
+    }
 
-      // Si el rango está dentro del mismo mes
+    // ── CALCULAR PERÍODO DE COMPARACIÓN según modo ────────────────────────────
+    let prevStart = '';
+    let prevEnd   = '';
+    let currLabel = '';
+    let prevLabel = '';
+    let comparisonSubtitle = '';
+
+    const [cy1, cm1, cd1] = currentStart.split('-').map(Number);
+    const [cy2, cm2, cd2] = currentEnd.split('-').map(Number);
+
+    if (modeFullMonth) {
+      // ── MODO B: Mes completo vs. mes completo ──────────────────────────────
+      // Usar el mes de currentStart como mes de referencia
+      const lastDayCurr = new Date(cy1, cm1, 0).getDate();
+      const fullCurrStart = `${cy1}-${String(cm1).padStart(2,'0')}-01`;
+      const fullCurrEnd   = `${cy1}-${String(cm1).padStart(2,'0')}-${String(lastDayCurr).padStart(2,'0')}`;
+
+      const py = cm1 === 1 ? cy1 - 1 : cy1;
+      const pm = cm1 === 1 ? 12 : cm1 - 1;
+      const lastDayPrev = new Date(py, pm, 0).getDate();
+      prevStart = `${py}-${String(pm).padStart(2,'0')}-01`;
+      prevEnd   = `${py}-${String(pm).padStart(2,'0')}-${String(lastDayPrev).padStart(2,'0')}`;
+
+      // Detectar si el mes actual está en curso
+      const today = new Date().toISOString().substring(0, 10);
+      const inProgress = today < fullCurrEnd;
+      const progressNote = inProgress ? ` (en curso · hasta ${today.substring(5)})` : '';
+
+      // Usar el rango real (puede ser sub-mes si no es el mes completo)
+      currentStart = fullCurrStart;
+      currentEnd   = inProgress ? today : fullCurrEnd;
+
+      currLabel = `${monthNames[cm1]} ${cy1}${progressNote}`;
+      prevLabel = `${monthNames[pm]} ${py} (Mes Completo)`;
+      comparisonSubtitle = `Mes completo: ${monthNames[cm1]} ${cy1} (1–${lastDayCurr}) vs. ${monthNames[pm]} ${py} (1–${lastDayPrev})`;
+
+    } else {
+      // ── MODO A (DEFAULT): Misma cantidad de días ───────────────────────────
+      // Si el rango cabe dentro del mismo mes
       if (cy1 === cy2 && cm1 === cm2) {
         const py = cm1 === 1 ? cy1 - 1 : cy1;
         const pm = cm1 === 1 ? 12 : cm1 - 1;
         const lastDayPrev = new Date(py, pm, 0).getDate();
         const pd1 = Math.min(cd1, lastDayPrev);
         const pd2 = Math.min(cd2, lastDayPrev);
-
-        prevStart = `${py}-${String(pm).padStart(2, '0')}-${String(pd1).padStart(2, '0')}`;
-        prevEnd   = `${py}-${String(pm).padStart(2, '0')}-${String(pd2).padStart(2, '0')}`;
+        prevStart = `${py}-${String(pm).padStart(2,'0')}-${String(pd1).padStart(2,'0')}`;
+        prevEnd   = `${py}-${String(pm).padStart(2,'0')}-${String(pd2).padStart(2,'0')}`;
 
         if (cd1 === 1 && cd2 >= 28) {
           currLabel = `${monthNames[cm1]} ${cy1} (Mes Completo)`;
@@ -1048,27 +1047,27 @@ const ChartManager = {
           comparisonSubtitle = `Días ${cd1}–${cd2} (${monthNames[cm1]} ${cy1} vs. ${monthNames[pm]} ${py})`;
         }
       } else {
-        // Rango multi-mes o semana puntual (ej. Semana 44: 26 Oct al 01 Nov)
+        // Rango multi-mes (ej. semana que cruza mes): comparar exactamente la misma cantidad de días, desplazando 1 mes atrás
         const dStart = typeof parseDateToNoon === 'function' ? parseDateToNoon(currentStart) : new Date(currentStart + 'T12:00:00');
-        const dEnd   = typeof parseDateToNoon === 'function' ? parseDateToNoon(currentEnd) : new Date(currentEnd + 'T12:00:00');
-        const diffMs = dEnd.getTime() - dStart.getTime();
-        const diffDays = Math.round(diffMs / (86400000)) + 1;
+        const dEnd   = typeof parseDateToNoon === 'function' ? parseDateToNoon(currentEnd)   : new Date(currentEnd   + 'T12:00:00');
+        const diffMs   = dEnd.getTime() - dStart.getTime();
+        const diffDays = Math.round(diffMs / 86400000) + 1;
 
         if (diffDays >= 6 && diffDays <= 8) {
-          // Semana de 7 días: comparar contra la semana calendario inmediatamente anterior
-          const pEndD = new Date(dStart.getTime() - 86400000);
-          const pStartD = new Date(pEndD.getTime() - ((diffDays - 1) * 86400000));
-          prevStart = typeof formatDateToNoonIso === 'function' ? formatDateToNoonIso(pStartD) : pStartD.toISOString().substring(0, 10);
-          prevEnd   = typeof formatDateToNoonIso === 'function' ? formatDateToNoonIso(pEndD) : pEndD.toISOString().substring(0, 10);
+          // Semana de 7 días → semana inmediatamente anterior
+          const pEndD   = new Date(dStart.getTime() - 86400000);
+          const pStartD = new Date(pEndD.getTime() - (diffDays - 1) * 86400000);
+          prevStart = typeof formatDateToNoonIso === 'function' ? formatDateToNoonIso(pStartD) : pStartD.toISOString().substring(0,10);
+          prevEnd   = typeof formatDateToNoonIso === 'function' ? formatDateToNoonIso(pEndD)   : pEndD.toISOString().substring(0,10);
           currLabel = `${currentStart.substring(5)} a ${currentEnd.substring(5)}`;
           prevLabel = `${prevStart.substring(5)} a ${prevEnd.substring(5)}`;
           comparisonSubtitle = `Semana actual (${currentStart} al ${currentEnd}) vs. Semana previa (${prevStart} al ${prevEnd})`;
         } else {
-          // Desfasar exactamente 1 mes hacia atrás
+          // Rango genérico → desplazar 1 mes atrás manteniendo exactamente la misma cantidad de días
           const p1 = new Date(dStart); p1.setMonth(p1.getMonth() - 1);
           const p2 = new Date(dEnd);   p2.setMonth(p2.getMonth() - 1);
-          prevStart = typeof formatDateToNoonIso === 'function' ? formatDateToNoonIso(p1) : p1.toISOString().substring(0, 10);
-          prevEnd   = typeof formatDateToNoonIso === 'function' ? formatDateToNoonIso(p2) : p2.toISOString().substring(0, 10);
+          prevStart = typeof formatDateToNoonIso === 'function' ? formatDateToNoonIso(p1) : p1.toISOString().substring(0,10);
+          prevEnd   = typeof formatDateToNoonIso === 'function' ? formatDateToNoonIso(p2) : p2.toISOString().substring(0,10);
           currLabel = `${currentStart} al ${currentEnd}`;
           prevLabel = `${prevStart} al ${prevEnd}`;
           comparisonSubtitle = `${currentStart} al ${currentEnd} vs. ${prevStart} al ${prevEnd}`;

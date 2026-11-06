@@ -619,7 +619,7 @@ async function initApp() {
     const meta = await TaDaDB.getMeta('last_sync');
 
     // Detectar caché obsoleto, incompleto o con esquema previo
-    const CACHE_VERSION = '2026-11-05-v95-verified';
+    const CACHE_VERSION = '2026-11-06-v96-temporal';
     const cachedVersion = await TaDaDB.getMeta('cache_version');
     const versionMismatch = cachedVersion !== CACHE_VERSION;
     const cachedCities = new Set(cachedMalla.map(r => r.city).filter(Boolean));
@@ -968,8 +968,27 @@ function setupEventListeners() {
     renderModulo3Visuals();
   });
 
-  // Selector de período para Gráfica 6 (Comparativo Mes Actual vs. Mes Anterior)
-  document.getElementById('chartMonthVsMonthPeriodSelect')?.addEventListener('change', () => {
+  // Listeners de checkboxes de comparación (Gráfica 6 — mutuamente excluyentes)
+  document.getElementById('chkSameDays')?.addEventListener('change', (e) => {
+    if (e.target.checked) {
+      const chkFull = document.getElementById('chkFullMonth');
+      if (chkFull) chkFull.checked = false;
+    } else {
+      // No permitir que ambos queden desmarcados
+      e.target.checked = true;
+    }
+    ChartManager.renderMonthVsPreviousMonthChart('chartMonthVsPreviousMonth', AppState.mallaShifts);
+  });
+
+  document.getElementById('chkFullMonth')?.addEventListener('change', (e) => {
+    if (e.target.checked) {
+      const chkSame = document.getElementById('chkSameDays');
+      if (chkSame) chkSame.checked = false;
+    } else {
+      // Volver a activar chkSameDays si se desmarca chkFullMonth
+      const chkSame = document.getElementById('chkSameDays');
+      if (chkSame) chkSame.checked = true;
+    }
     ChartManager.renderMonthVsPreviousMonthChart('chartMonthVsPreviousMonth', AppState.mallaShifts);
   });
 
@@ -2249,7 +2268,11 @@ function renderModulo3Visuals() {
   ChartManager.renderCityStorePerformanceChart('chartCityStorePerformance', mallaForCityChart, citySelect?.value || '');
 
   // Renderizar Gráfica 6: Comparativo Mes Actual vs. Mes Anterior con corte equivalente (Req 8)
-  ChartManager.renderMonthVsPreviousMonthChart('chartMonthVsPreviousMonth', AppState.mallaShifts);
+  // Pasamos el período de la semana seleccionada para que el gráfico lo use como currentPeriod
+  const comparativePeriod = selectedWeek
+    ? { startDate: selectedWeek.startDate, endDate: selectedWeek.endDate }
+    : null;
+  ChartManager.renderMonthVsPreviousMonthChart('chartMonthVsPreviousMonth', AppState.mallaShifts, comparativePeriod);
 
   // ============================================================
   // TENDENCIA HISTÓRICA SEMANA A SEMANA (Visual de Semanas Pasadas)
