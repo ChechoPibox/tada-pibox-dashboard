@@ -557,7 +557,7 @@ function restoreTableSort(tableOrId) {
   if (!table) return;
   const tbody = table.querySelector('tbody');
   if (!tbody) return;
-  if (table.dataset.sortColIdx != null) {
+  if (table.dataset && table.dataset.sortColIdx != null) {
     const colIdx = Number(table.dataset.sortColIdx);
     const dir = table.dataset.sortDir || 'asc';
     sortTbodyRows(tbody, colIdx, dir);
@@ -643,7 +643,7 @@ async function initApp() {
     const meta = await TaDaDB.getMeta('last_sync');
 
     // Detectar caché obsoleto, incompleto o con esquema previo
-    const CACHE_VERSION = '2026-11-19-v101-modulo3-premium-evolution';
+    const CACHE_VERSION = '2026-11-19-v102-modulo3-fix-currlabel-layout';
     const cachedVersion = await TaDaDB.getMeta('cache_version');
     const versionMismatch = cachedVersion !== CACHE_VERSION;
     const cachedCities = new Set(cachedMalla.map(r => r.city).filter(Boolean));
@@ -1166,6 +1166,7 @@ function switchTab(tabId) {
   if (tabId === 'metricas') {
     setTimeout(() => {
       renderModulo3Visuals();
+      if (typeof initDualScrollbars === 'function') initDualScrollbars();
     }, 50);
   }
 
@@ -2194,9 +2195,13 @@ function initDualScrollbars() {
     if (!top || !bottom || !table) return;
 
     const syncWidth = () => {
+      // Si la pestaña contenedora está oculta (display:none), offsetWidth es 0, no hacer nada aún
+      if (wrapper.offsetParent === null) return;
       if (topInner) {
-        topInner.style.width = table.scrollWidth + 'px';
-        if (table.scrollWidth <= bottom.clientWidth + 2) {
+        const sWidth = table.scrollWidth || table.offsetWidth;
+        const cWidth = bottom.clientWidth || bottom.offsetWidth;
+        topInner.style.width = sWidth + 'px';
+        if (sWidth <= cWidth + 4) {
           top.style.display = 'none';
         } else {
           top.style.display = 'block';
@@ -2206,28 +2211,31 @@ function initDualScrollbars() {
 
     syncWidth();
 
-    let isSyncingTop = false;
-    let isSyncingBottom = false;
+    if (!wrapper._scrollSyncAttached) {
+      wrapper._scrollSyncAttached = true;
+      let isSyncingTop = false;
+      let isSyncingBottom = false;
 
-    top.addEventListener('scroll', () => {
-      if (!isSyncingTop) {
-        isSyncingBottom = true;
-        bottom.scrollLeft = top.scrollLeft;
+      top.addEventListener('scroll', () => {
+        if (!isSyncingTop) {
+          isSyncingBottom = true;
+          bottom.scrollLeft = top.scrollLeft;
+        }
+        isSyncingTop = false;
+      }, { passive: true });
+
+      bottom.addEventListener('scroll', () => {
+        if (!isSyncingBottom) {
+          isSyncingTop = true;
+          top.scrollLeft = bottom.scrollLeft;
+        }
+        isSyncingBottom = false;
+      }, { passive: true });
+
+      if (window.ResizeObserver) {
+        new ResizeObserver(syncWidth).observe(table);
+        new ResizeObserver(syncWidth).observe(bottom);
       }
-      isSyncingTop = false;
-    }, { passive: true });
-
-    bottom.addEventListener('scroll', () => {
-      if (!isSyncingBottom) {
-        isSyncingTop = true;
-        top.scrollLeft = bottom.scrollLeft;
-      }
-      isSyncingBottom = false;
-    }, { passive: true });
-
-    if (window.ResizeObserver) {
-      new ResizeObserver(syncWidth).observe(table);
-      new ResizeObserver(syncWidth).observe(bottom);
     }
   });
 }

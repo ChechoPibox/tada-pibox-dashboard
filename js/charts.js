@@ -179,16 +179,7 @@ const ChartManager = {
     };
 
     
-    // Guardar métricas calculadas para renderizar tabla comparativa sincronizada
-    ChartManager._lastMonthVsMonthData = {
-      currLabel,
-      prevLabel,
-      currMet,
-      prevMet
-    };
-    if (typeof renderMonthVsMonthTable === 'function') {
-      renderMonthVsMonthTable(ChartManager._lastMonthVsMonthData);
-    }
+
   
     this.instances[canvasId] = new Chart(ctx, {
       type: 'doughnut',
@@ -1195,6 +1186,17 @@ const ChartManager = {
       prevMet.prod != null ? +prevMet.prod.toFixed(2) : null
     ];
 
+    // Guardar métricas calculadas para renderizar tabla comparativa sincronizada
+    ChartManager._lastMonthVsMonthData = {
+      currLabel,
+      prevLabel,
+      currMet,
+      prevMet
+    };
+    if (typeof renderMonthVsMonthTable === 'function') {
+      renderMonthVsMonthTable(ChartManager._lastMonthVsMonthData);
+    }
+
     this.instances[canvasId] = new Chart(ctx, {
       type: 'bar',
       data: {
@@ -1257,3 +1259,11 @@ const ChartManager = {
   }
 };
 
+
+
+if (typeof window !== 'undefined') {
+  window.ChartManager = ChartManager;
+}
+if (typeof global !== 'undefined') {
+  global.ChartManager = ChartManager;
+}
