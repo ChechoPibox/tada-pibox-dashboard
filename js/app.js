@@ -608,6 +608,27 @@ async function initApp() {
   setupInTableSearch('flotaTableSearch', 'tableTop5Store');
   setupInTableSearch('escalafonTableSearch', 'tableTop10Global');
   setupUniversalTableSorting();
+
+  // Listener de botones TOP 3 / TOP 5 en Módulo 3
+  document.querySelectorAll('.btn-top-pilot-filter').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      document.querySelectorAll('.btn-top-pilot-filter').forEach(b => b.classList.remove('active'));
+      e.target.classList.add('active');
+      const topN = parseInt(e.target.getAttribute('data-top') || '3', 10);
+      AppState._currentTopPilotsN = topN;
+      if (AppState._currentModulo3TargetShifts) {
+        renderModulo3RecognitionRankings(AppState._currentModulo3TargetShifts, topN);
+      }
+    });
+  });
+
+  // Filtro de tienda en tabla de Cobertura y Faltantes por Punto
+  document.getElementById('inputFilterCoverageStoreTable')?.addEventListener('input', () => {
+    if (AppState._currentModulo3TargetShifts) {
+      renderModulo3StoreCoverageTable(AppState._currentModulo3TargetShifts);
+    }
+  });
+
   initRiskTableControls();
   initDualScrollbars();
 
@@ -622,7 +643,7 @@ async function initApp() {
     const meta = await TaDaDB.getMeta('last_sync');
 
     // Detectar caché obsoleto, incompleto o con esquema previo
-    const CACHE_VERSION = '2026-11-06-v100-dual-scroll-adaptive-tables';
+    const CACHE_VERSION = '2026-11-19-v101-modulo3-premium-evolution';
     const cachedVersion = await TaDaDB.getMeta('cache_version');
     const versionMismatch = cachedVersion !== CACHE_VERSION;
     const cachedCities = new Set(cachedMalla.map(r => r.city).filter(Boolean));
@@ -2353,6 +2374,23 @@ function renderModulo3Visuals() {
     ? { startDate: selectedWeek.startDate, endDate: selectedWeek.endDate }
     : null;
   ChartManager.renderMonthVsPreviousMonthChart('chartMonthVsPreviousMonth', AppState.mallaShifts, comparativePeriod);
+
+  // Guardar en AppState para filtros reactivos
+  AppState._currentModulo3TargetShifts = targetMalla;
+  const currentTopN = AppState._currentTopPilotsN || 3;
+
+  // 1. Renderizar Tabla de Cobertura, Faltantes y Reemplazos por Punto (Req 2)
+  renderModulo3StoreCoverageTable(targetMalla);
+
+  // 2. Renderizar TOPs de Tiendas y Pilotos por Productividad y Asistencia (Req 4 y 5)
+  renderModulo3RecognitionRankings(targetMalla, currentTopN);
+
+  // 3. Renderizar Feedback Ejecutivo y Recomendaciones Operativas (Req 6)
+  const currentWeekKpis = typeof calculateModulo1Kpis === 'function' ? calculateModulo1Kpis(targetMalla, APP_CONFIG) : null;
+  const lastComp = ChartManager._lastMonthVsMonthData;
+  const coverageStoreStats = typeof Modulo3IntelligenceEngine !== 'undefined' ? Modulo3IntelligenceEngine.computeStoreCoverageStats(targetMalla) : [];
+  renderModulo3ExecutiveFeedback(currentWeekKpis, lastComp?.prevMet?.fullKpis, coverageStoreStats, selectedWeek);
+
 
   // ============================================================
   // TENDENCIA HISTÓRICA SEMANA A SEMANA (Visual de Semanas Pasadas)
@@ -4180,3 +4218,393 @@ document.addEventListener('visibilitychange', () => {
     startAutoRefresh(60000);
   }
 });
+
+
+// ============================================================
+// MÓDULO 3 — RENDERS PREMIUM (v101)
+// Cobertura por Punto, Comparativo Mes vs Mes, TOPs y Feedback
+// ============================================================
+
+/**
+ * REQUERIMIENTO 2: Renderiza la tabla de Cobertura y Faltantes por Punto
+ */
+function renderModulo3StoreCoverageTable(targetShifts) {
+  const tbody = document.getElementById('tableModulo3StoreCoverageBody');
+  if (!tbody || typeof Modulo3IntelligenceEngine === 'undefined') return;
+
+  const stats = Modulo3IntelligenceEngine.computeStoreCoverageStats(targetShifts);
+  const filterInput = document.getElementById('inputFilterCoverageStoreTable');
+  const query = (filterInput?.value || '').trim().toLowerCase();
+
+  const filteredStats = query
+    ? stats.filter(st => st.store.toLowerCase().includes(query) || st.city.toLowerCase().includes(query))
+    : stats;
+
+  if (filteredStats.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:24px;color:var(--text-dim);">No hay registros de tiendas para los filtros aplicados.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = filteredStats.map(st => {
+    const covColor = st.coveragePct >= 95 ? '#10b981' : (st.coveragePct >= 85 ? '#f59e0b' : '#ef4444');
+    const missColor = st.missing === 0 ? '#10b981' : (st.missing <= 2 ? '#f59e0b' : '#ef4444');
+    const repColor = st.replacementsPct <= 10 ? '#10b981' : (st.replacementsPct <= 25 ? '#f59e0b' : '#ef4444');
+    const rowAlert = st.missing > 0 ? 'background: rgba(239, 68, 68, 0.04);' : '';
+
+    return `
+      <tr style="${rowAlert}">
+        <td><strong>${escapeHtml(st.store)}</strong></td>
+        <td><span class="pill pill-neutral">${escapeHtml(st.city)}</span></td>
+        <td style="text-align:center;"><strong>${st.requested}</strong></td>
+        <td style="text-align:center;color:var(--text-muted);">${st.confirmed}</td>
+        <td style="text-align:center;color:#6ee7b7;font-weight:700;">${st.covered}</td>
+        <td style="text-align:center;">
+          <span class="pill ${st.missing > 0 ? 'pill-bad' : 'pill-neutral'}" style="font-weight:700;">
+            ${st.missing > 0 ? ('🚨 ' + st.missing) : '0'}
+          </span>
+        </td>
+        <td style="text-align:center;">
+          <span class="pill ${st.replacements > 0 ? 'pill-warn' : 'pill-neutral'}">
+            ${st.replacements}
+          </span>
+        </td>
+        <td>
+          <div class="table-cell-progress">
+            <div class="table-cell-bar-bg">
+              <div class="table-cell-bar-fill" style="width: ${Math.min(100, st.coveragePct)}%; background: ${covColor};"></div>
+            </div>
+            <strong style="font-size:0.75rem; color:${covColor}; min-width:42px; text-align:right;">${st.coveragePct}%</strong>
+          </div>
+        </td>
+        <td style="text-align:center;">
+          <span style="font-size:0.78rem; font-weight:700; color:${missColor};">
+            ${st.missingPct}%
+          </span>
+        </td>
+        <td style="text-align:center;">
+          <span class="pill" style="background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); font-size:0.78rem; font-weight:700; color:${repColor};">
+            ${st.replacementsPct}%
+          </span>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  const table = tbody.closest('table');
+  if (table) restoreTableSort(table);
+  if (typeof initDualScrollbars === 'function') setTimeout(initDualScrollbars, 50);
+}
+
+/**
+ * REQUERIMIENTO 3: Renderiza la tabla comparativa Mes Actual vs Mes Anterior
+ */
+function renderMonthVsMonthTable(data) {
+  const tbody = document.getElementById('tbodyMonthVsMonth');
+  const thCurr = document.getElementById('thCompareCurrent');
+  const thPrev = document.getElementById('thComparePrevious');
+  if (!tbody || !data || !data.currMet || !data.prevMet) return;
+
+  if (thCurr) thCurr.innerText = data.currLabel || 'Periodo Actual';
+  if (thPrev) thPrev.innerText = data.prevLabel || 'Periodo Previo';
+
+  const cm = data.currMet;
+  const pm = data.prevMet;
+
+  const rows = [
+    {
+      kpi: 'Turnos Programados (Req.)',
+      curr: cm.evaluable,
+      prev: pm.evaluable,
+      isPct: false,
+      isInverse: false,
+      unit: ' turnos'
+    },
+    {
+      kpi: 'Turnos Cubiertos (Efectivos)',
+      curr: cm.attended,
+      prev: pm.attended,
+      isPct: false,
+      isInverse: false,
+      unit: ' turnos'
+    },
+    {
+      kpi: 'Cupos Faltantes (Vacantes)',
+      curr: cm.missing,
+      prev: pm.missing,
+      isPct: false,
+      isInverse: true, // menos faltantes es positivo
+      unit: ' turnos'
+    },
+    {
+      kpi: 'Cancelaciones Operativas',
+      curr: cm.cancels,
+      prev: pm.cancels,
+      isPct: false,
+      isInverse: true, // menos cancelaciones es positivo
+      unit: ' turnos'
+    },
+    {
+      kpi: 'Cobertura de Asistencia (%)',
+      curr: cm.covPct != null ? +cm.covPct.toFixed(1) : null,
+      prev: pm.covPct != null ? +pm.covPct.toFixed(1) : null,
+      isPct: true,
+      isInverse: false,
+      unit: '%'
+    },
+    {
+      kpi: 'Tasa de Cancelación (%)',
+      curr: cm.canPct != null ? +cm.canPct.toFixed(1) : null,
+      prev: pm.canPct != null ? +pm.canPct.toFixed(1) : null,
+      isPct: true,
+      isInverse: true,
+      unit: '%'
+    },
+    {
+      kpi: 'Productividad de Flota (paq/h)',
+      curr: cm.prod != null ? +cm.prod.toFixed(2) : null,
+      prev: pm.prod != null ? +pm.prod.toFixed(2) : null,
+      isPct: false,
+      isInverse: false,
+      unit: ' paq/h'
+    },
+    {
+      kpi: 'Volumen Paquetes Entregados',
+      curr: cm.packages,
+      prev: pm.packages,
+      isPct: false,
+      isInverse: false,
+      unit: ' paqs'
+    }
+  ];
+
+  tbody.innerHTML = rows.map(r => {
+    const valC = r.curr;
+    const valP = r.prev;
+    let diffStr = '—';
+    let pctStr = '—';
+    let badgeClass = 'diff-neutral';
+    let icon = '⏸️';
+
+    if (valC != null && valP != null) {
+      const diff = +(valC - valP).toFixed(2);
+      const isGood = r.isInverse ? diff < 0 : diff > 0;
+      const isBad = r.isInverse ? diff > 0 : diff < 0;
+
+      badgeClass = diff === 0 ? 'diff-neutral' : (isGood ? 'diff-good' : 'diff-bad');
+      icon = diff === 0 ? '⏸️' : (isGood ? '▲' : '▼');
+      const sign = diff > 0 ? '+' : '';
+      diffStr = `${sign}${diff}${r.unit}`;
+
+      if (valP !== 0) {
+        const pct = +((diff / valP) * 100).toFixed(1);
+        pctStr = `${sign}${pct}%`;
+      }
+    }
+
+    const formatVal = (v) => {
+      if (v == null) return 'N/A';
+      return r.isPct ? `${v}%` : (typeof v === 'number' && v % 1 !== 0 ? v.toFixed(2) : v.toLocaleString());
+    };
+
+    return `
+      <tr>
+        <td><strong>${r.kpi}</strong></td>
+        <td style="color:#fff; font-weight:700;">${formatVal(valC)}</td>
+        <td style="color:var(--text-muted);">${formatVal(valP)}</td>
+        <td><strong style="color:${badgeClass === 'diff-good' ? '#34d399' : badgeClass === 'diff-bad' ? '#f87171' : 'var(--text-muted)'};">${diffStr}</strong></td>
+        <td><span class="diff-badge ${badgeClass}">${pctStr}</span></td>
+        <td><span class="diff-badge ${badgeClass}">${icon} ${badgeClass === 'diff-good' ? 'Favorable' : badgeClass === 'diff-bad' ? 'Desfavorable' : 'Estable'}</span></td>
+      </tr>
+    `;
+  }).join('');
+}
+
+/**
+ * REQUERIMIENTOS 4 y 5: Renderiza los rankings de Reconocimiento Operativo
+ */
+function renderModulo3RecognitionRankings(targetShifts, topPilotsN = 3) {
+  if (typeof Modulo3IntelligenceEngine === 'undefined') return;
+
+  const topStores = Modulo3IntelligenceEngine.computeStoreProductivityRanking(targetShifts, 5);
+  const { topProd, topAtt } = Modulo3IntelligenceEngine.computePilotsRankings(targetShifts, topPilotsN, 1);
+
+  // Guardar en AppState para retroalimentación ejecutiva
+  AppState._lastModulo3TopStores = topStores;
+  AppState._lastModulo3TopPilotsProd = topProd;
+  AppState._lastModulo3TopPilotsAtt = topAtt;
+
+  const cStores = document.getElementById('containerTopStoresProductivity');
+  const cPilotsProd = document.getElementById('containerTopPilotsProductivity');
+  const cPilotsAtt = document.getElementById('containerTopPilotsAttendance');
+
+  const titleProd = document.getElementById('titleTopPilotsProd');
+  const titleAtt = document.getElementById('titleTopPilotsAtt');
+  if (titleProd) titleProd.innerText = `🥇 TOP ${topPilotsN} Pilotos Más Productivos (paq/h)`;
+  if (titleAtt) titleAtt.innerText = `🛡️ TOP ${topPilotsN} Pilotos con Mejor Asistencia (%)`;
+
+  // Helper para renderizar medalla de podio
+  const getPodiumBadge = (idx) => {
+    if (idx === 0) return '<span class="podium-rank-badge podium-gold" title="1er Puesto">🥇</span>';
+    if (idx === 1) return '<span class="podium-rank-badge podium-silver" title="2do Puesto">🥈</span>';
+    if (idx === 2) return '<span class="podium-rank-badge podium-bronze" title="3er Puesto">🥉</span>';
+    return `<span class="podium-rank-badge podium-standard">${idx + 1}</span>`;
+  };
+
+  // Render Top 5 Tiendas
+  if (cStores) {
+    if (topStores.length === 0) {
+      cStores.innerHTML = '<div style="padding:16px;color:var(--text-dim);font-size:0.8rem;">Sin datos de tiendas en esta semana.</div>';
+    } else {
+      cStores.innerHTML = topStores.map((st, i) => `
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 12px; margin-bottom:8px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); border-radius:10px;">
+          <div style="display:flex; align-items:center; gap:10px;">
+            ${getPodiumBadge(i)}
+            <div>
+              <div style="font-weight:700; color:#fff; font-size:0.82rem;">${escapeHtml(st.store)}</div>
+              <div style="font-size:0.72rem; color:var(--text-muted);">${escapeHtml(st.city)} · ${st.covered} turnos · ${st.packages} paqs</div>
+            </div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:0.95rem; font-weight:800; color:#a78bfa;">${st.prodPaqH} <span style="font-size:0.7rem; color:var(--text-muted); font-weight:400;">paq/h</span></div>
+            <div style="font-size:0.72rem; color:#34d399;">${st.attendancePct}% asist</div>
+          </div>
+        </div>
+      `).join('');
+    }
+  }
+
+  // Render Top Pilotos Productividad
+  if (cPilotsProd) {
+    if (topProd.length === 0) {
+      cPilotsProd.innerHTML = '<div style="padding:16px;color:var(--text-dim);font-size:0.8rem;">Sin datos de pilotos en esta semana.</div>';
+    } else {
+      cPilotsProd.innerHTML = topProd.map((p, i) => `
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 12px; margin-bottom:8px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); border-radius:10px;">
+          <div style="display:flex; align-items:center; gap:10px;">
+            ${getPodiumBadge(i)}
+            <div>
+              <div style="font-weight:700; color:#fff; font-size:0.82rem;">${escapeHtml(p.pilot)}</div>
+              <div style="font-size:0.72rem; color:var(--text-muted);">${escapeHtml(p.store)} · ${p.packages} paqs · ${p.attendedCount}t</div>
+            </div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:0.95rem; font-weight:800; color:#38bdf8;">${p.prodPaqH} <span style="font-size:0.7rem; color:var(--text-muted); font-weight:400;">paq/h</span></div>
+            <div style="font-size:0.72rem; color:#34d399;">${p.attendancePct}% asist</div>
+          </div>
+        </div>
+      `).join('');
+    }
+  }
+
+  // Render Top Pilotos Asistencia
+  if (cPilotsAtt) {
+    if (topAtt.length === 0) {
+      cPilotsAtt.innerHTML = '<div style="padding:16px;color:var(--text-dim);font-size:0.8rem;">Sin datos de pilotos en esta semana.</div>';
+    } else {
+      cPilotsAtt.innerHTML = topAtt.map((p, i) => `
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 12px; margin-bottom:8px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); border-radius:10px;">
+          <div style="display:flex; align-items:center; gap:10px;">
+            ${getPodiumBadge(i)}
+            <div>
+              <div style="font-weight:700; color:#fff; font-size:0.82rem;">${escapeHtml(p.pilot)}</div>
+              <div style="font-size:0.72rem; color:var(--text-muted);">${escapeHtml(p.store)} · ${p.attendedCount} asistidos de ${p.evaluableShifts}</div>
+            </div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:0.95rem; font-weight:800; color:#10b981;">${p.attendancePct}%</div>
+            <div style="font-size:0.72rem; color:var(--text-muted);">${p.pilotCancels === 0 ? '0 cancels 🛡️' : (p.pilotCancels + ' cancel')}</div>
+          </div>
+        </div>
+      `).join('');
+    }
+  }
+}
+
+/**
+ * REQUERIMIENTO 6: Renderiza el Feedback Ejecutivo y Recomendaciones Operativas
+ */
+function renderModulo3ExecutiveFeedback(currKpis, prevKpis, coverageStores, selectedWeek) {
+  if (typeof Modulo3IntelligenceEngine === 'undefined') return;
+
+  const topStores = AppState._lastModulo3TopStores || [];
+  const topPilotsProd = AppState._lastModulo3TopPilotsProd || [];
+  const topPilotsAtt = AppState._lastModulo3TopPilotsAtt || [];
+
+  const feedback = Modulo3IntelligenceEngine.generateExecutiveFeedback(
+    currKpis,
+    prevKpis,
+    topStores,
+    topPilotsProd,
+    topPilotsAtt,
+    coverageStores
+  );
+
+  if (!feedback) return;
+
+  const subEl = document.getElementById('feedbackPeriodSubtitle');
+  if (subEl && selectedWeek) {
+    subEl.innerText = `Diagnóstico gerencial generado para ${selectedWeek.label} (${selectedWeek.startDate} al ${selectedWeek.endDate})`;
+  }
+
+  // 1. Resumen General
+  const generalEl = document.getElementById('feedbackGeneralSummary');
+  if (generalEl) generalEl.innerHTML = feedback.summary;
+
+  // 2. Resultados Destacados
+  const posEl = document.getElementById('feedbackPositiveResults');
+  if (posEl) {
+    const items = [];
+    if (feedback.topStore) {
+      items.push(`Tienda líder: <strong>${feedback.topStore.store}</strong> (${feedback.topStore.prodPaqH} paq/h, ${feedback.topStore.packages} paquetes).`);
+    }
+    if (feedback.topPilotProd) {
+      items.push(`Piloto más productivo: <strong>${feedback.topPilotProd.pilot}</strong> (${feedback.topPilotProd.prodPaqH} paq/h).`);
+    }
+    if (feedback.topPilotAtt) {
+      items.push(`Mayor lealtad de asistencia: <strong>${feedback.topPilotAtt.pilot}</strong> (${feedback.topPilotAtt.attendancePct}% asistido sin cancelaciones).`);
+    }
+    posEl.innerHTML = items.length > 0 ? items.join('<br><br>') : 'Operación estable dentro de los parámetros esperados.';
+  }
+
+  // 3. Oportunidades de Mejora
+  const impEl = document.getElementById('feedbackImprovementAreas');
+  if (impEl) {
+    const items = [];
+    if (feedback.faltantes > 0) {
+      items.push(`Se identificaron <strong>${feedback.faltantes} cupos faltantes</strong> que requirieron suplentes de emergencia.`);
+    }
+    if (feedback.criticalStores.length > 0) {
+      const storesList = feedback.criticalStores.map(s => `${s.store} (${s.missing} vacantes)`).join(', ');
+      items.push(`Tiendas con vacantes no cubiertas: <strong>${storesList}</strong>.`);
+    }
+    if (feedback.highReplacementStores.length > 0) {
+      const repList = feedback.highReplacementStores.map(s => `${s.store} (${s.replacementsPct}%)`).join(', ');
+      items.push(`Alta dependencia de reemplazos en: <strong>${repList}</strong>.`);
+    }
+    impEl.innerHTML = items.length > 0 ? items.join('<br><br>') : '✅ No se detectaron vacantes críticas descubiertas en el periodo.';
+  }
+
+  // 4. Comparación Histórica
+  const histEl = document.getElementById('feedbackHistoricalEvolution');
+  if (histEl) {
+    if (feedback.historyDeltas.length === 0) {
+      histEl.innerHTML = 'Comparativo frente a periodo cronológicamente equivalente sin fluctuaciones atípicas.';
+    } else {
+      histEl.innerHTML = feedback.historyDeltas.map(d => {
+        const sign = d.diff > 0 ? '+' : '';
+        const color = d.favorable ? '#34d399' : '#f87171';
+        return `<div><strong>${d.kpi}:</strong> <span style="color:${color}; font-weight:700;">${sign}${d.diff} ${d.unit}</span> (${d.favorable ? 'Mejora' : 'Atención'})</div>`;
+      }).join('');
+    }
+  }
+
+  // 5. Recomendaciones Operativas
+  const recEl = document.getElementById('feedbackRecommendationsList');
+  if (recEl) {
+    if (feedback.recommendations.length === 0) {
+      recEl.innerHTML = '<li>Mantener los estándares operativos y niveles de cobertura actuales.</li>';
+    } else {
+      recEl.innerHTML = feedback.recommendations.map(r => `<li>${r}</li>`).join('');
+    }
+  }
+}

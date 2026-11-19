@@ -10,7 +10,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   
-  <link rel="stylesheet" href="./css/styles.css?v=20261106_v100">
+  <link rel="stylesheet" href="./css/styles.css?v=20261119_v101">
   <link rel="icon" href="./assets/logo_pibox_tada.jpg" type="image/jpeg">
 </head>
 <body>
@@ -740,8 +740,115 @@
                 <div id="monthVsMonthBadge" class="pill pill-neutral" style="font-size: 0.75rem;">Periodo Equivalente</div>
               </div>
             </div>
-            <div class="chart-container" style="height: 280px;">
+            <div class="chart-container" style="height: 240px;">
               <canvas id="chartMonthVsPreviousMonth"></canvas>
+            </div>
+            <!-- Tabla Detalle Comparativo Sincronizado (Req 3) -->
+            <div style="margin-top: 14px; overflow-x: auto; border: 1px solid rgba(255,255,255,0.06); border-radius: 8px;">
+              <table class="compare-table" id="tableMonthVsMonthComparison">
+                <thead>
+                  <tr>
+                    <th>Indicador</th>
+                    <th id="thCompareCurrent">Periodo Actual</th>
+                    <th id="thComparePrevious">Periodo Previo</th>
+                    <th>Dif. Absoluta</th>
+                    <th>Variación %</th>
+                    <th>Tendencia</th>
+                  </tr>
+                </thead>
+                <tbody id="tbodyMonthVsMonth">
+                  <!-- Llenado dinámicamente -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- BLOQUE 1.2: TABLA DETALLADA DE COBERTURA Y FALTANTES POR PUNTO (Req 2) -->
+      <section class="section-panel" style="margin-bottom: 20px;">
+        <div class="panel-header" style="flex-wrap: wrap; gap: 10px;">
+          <div>
+            <div class="panel-title" style="font-size: 1rem;">🏪 Cobertura, Faltantes y Dependencia de Reemplazos por Punto</div>
+            <div class="panel-subtitle" style="font-size: 0.78rem;">Balance de turnos solicitados, confirmados, cubiertos, faltantes y tasa de reemplazos</div>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <input type="text" id="inputFilterCoverageStoreTable" class="filter-input" placeholder="🔍 Filtrar tienda..." style="font-size: 0.78rem; padding: 4px 10px; height: 32px; width: 180px;">
+          </div>
+        </div>
+
+        <div class="table-scroll-wrapper" id="wrapperModulo3Coverage">
+          <div class="table-scroll-top" id="scrollTopModulo3Coverage">
+            <div class="table-scroll-top-inner"></div>
+          </div>
+          <div class="table-scroll-bottom table-responsive">
+            <table class="data-table" style="min-width: 950px;">
+              <thead>
+                <tr>
+                  <th style="min-width: 140px; white-space: nowrap;">Tienda / Punto</th>
+                  <th style="min-width: 80px; white-space: nowrap;">Ciudad</th>
+                  <th style="min-width: 85px; text-align: center; white-space: nowrap;">Solicitados</th>
+                  <th style="min-width: 85px; text-align: center; white-space: nowrap;">Confirmados</th>
+                  <th style="min-width: 85px; text-align: center; white-space: nowrap;">Cubiertos</th>
+                  <th style="min-width: 85px; text-align: center; white-space: nowrap;">Faltantes</th>
+                  <th style="min-width: 85px; text-align: center; white-space: nowrap;">Reemplazos</th>
+                  <th style="min-width: 130px; white-space: nowrap;">% Cobertura</th>
+                  <th style="min-width: 100px; text-align: center; white-space: nowrap;">% Faltantes</th>
+                  <th style="min-width: 120px; text-align: center; white-space: nowrap;">% Reemplazos</th>
+                </tr>
+              </thead>
+              <tbody id="tableModulo3StoreCoverageBody">
+                <!-- Generado dinámicamente -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- BLOQUE 2: RECONOCIMIENTO OPERATIVO — TOP TIENDAS & TOP PILOTOS (Req 4 y 5) -->
+      <section class="section-panel" style="margin-bottom: 20px;">
+        <div class="panel-header" style="flex-wrap: wrap; gap: 12px;">
+          <div>
+            <div class="panel-title" style="font-size: 1.05rem;">🏆 Reconocimiento Operativo — Mejores Tiendas y Pilotos Élite</div>
+            <div class="panel-subtitle" style="font-size: 0.78rem;">Puntos y conductores con mayor productividad efectiva y lealtad de asistencia</div>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600;">Ver Pilotos:</span>
+            <div class="btn-group-utilities" style="display:inline-flex; gap: 4px;">
+              <button type="button" class="btn btn-secondary btn-top-pilot-filter active" data-top="3" style="padding: 4px 10px; font-size: 0.75rem; font-weight: 700;">TOP 3</button>
+              <button type="button" class="btn btn-secondary btn-top-pilot-filter" data-top="5" style="padding: 4px 10px; font-size: 0.75rem; font-weight: 700;">TOP 5</button>
+            </div>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; margin-top: 14px;">
+          <!-- Top 5 Tiendas por Productividad -->
+          <div class="section-panel" style="background: var(--bg-card); margin-bottom: 0; padding: 16px;">
+            <div class="panel-header" style="padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.06); margin-bottom: 12px;">
+              <div class="panel-title" style="font-size: 0.9rem;">🏪 TOP 5 Tiendas Más Productivas</div>
+            </div>
+            <div id="containerTopStoresProductivity">
+              <!-- Renderizado dinámicamente -->
+            </div>
+          </div>
+
+          <!-- Top Pilotos por Productividad -->
+          <div class="section-panel" style="background: var(--bg-card); margin-bottom: 0; padding: 16px;">
+            <div class="panel-header" style="padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.06); margin-bottom: 12px;">
+              <div class="panel-title" style="font-size: 0.9rem;" id="titleTopPilotsProd">🥇 Pilotos Más Productivos (paq/h)</div>
+            </div>
+            <div id="containerTopPilotsProductivity">
+              <!-- Renderizado dinámicamente -->
+            </div>
+          </div>
+
+          <!-- Top Pilotos por Asistencia -->
+          <div class="section-panel" style="background: var(--bg-card); margin-bottom: 0; padding: 16px;">
+            <div class="panel-header" style="padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.06); margin-bottom: 12px;">
+              <div class="panel-title" style="font-size: 0.9rem;" id="titleTopPilotsAtt">🛡️ Pilotos con Mejor Asistencia (%)</div>
+            </div>
+            <div id="containerTopPilotsAttendance">
+              <!-- Renderizado dinámicamente -->
             </div>
           </div>
         </div>
@@ -810,6 +917,73 @@
             </table>
           </div>
           </div>
+        </div>
+      </section>
+
+      <!-- BLOQUE 3: FEEDBACK Y ANÁLISIS EJECUTIVO GERENCIAL (Req 6) -->
+      <section class="executive-feedback-card" id="executiveFeedbackSection" style="margin-top: 24px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; border-bottom:1px solid rgba(139,92,246,0.3); padding-bottom:14px;">
+          <div>
+            <div style="font-size: 1.15rem; font-weight: 800; color: #fff; display: flex; align-items: center; gap: 8px;">
+              <span>🧠</span> Informe y Resumen Ejecutivo de la Operación
+            </div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;" id="feedbackPeriodSubtitle">
+              Diagnóstico estratégico generado para la semana seleccionada
+            </div>
+          </div>
+          <span class="pill pill-primary" style="font-size:0.75rem;">Inteligencia Operativa TaDa / Pibox</span>
+        </div>
+
+        <div class="feedback-grid">
+          <!-- 1. Resumen General -->
+          <div class="feedback-item" style="border-left: 3px solid #8b5cf6;">
+            <div class="feedback-item-title">
+              <span>📊</span> Resumen General de Desempeño
+            </div>
+            <div class="feedback-item-body" id="feedbackGeneralSummary">
+              Analizando métricas del periodo...
+            </div>
+          </div>
+
+          <!-- 2. Resultados Positivos -->
+          <div class="feedback-item" style="border-left: 3px solid #10b981;">
+            <div class="feedback-item-title" style="color: #34d399;">
+              <span>🌟</span> Resultados Destacados
+            </div>
+            <div class="feedback-item-body" id="feedbackPositiveResults">
+              Cargando puntos sobresalientes...
+            </div>
+          </div>
+
+          <!-- 3. Oportunidades de Mejora -->
+          <div class="feedback-item" style="border-left: 3px solid #ef4444;">
+            <div class="feedback-item-title" style="color: #f87171;">
+              <span>⚠️</span> Oportunidades de Mejora
+            </div>
+            <div class="feedback-item-body" id="feedbackImprovementAreas">
+              Evaluando faltantes y cancelaciones...
+            </div>
+          </div>
+
+          <!-- 4. Comparación Histórica -->
+          <div class="feedback-item" style="border-left: 3px solid #38bdf8;">
+            <div class="feedback-item-title" style="color: #38bdf8;">
+              <span>📈</span> Evolución vs Periodo Anterior
+            </div>
+            <div class="feedback-item-body" id="feedbackHistoricalEvolution">
+              Comparando tendencias...
+            </div>
+          </div>
+        </div>
+
+        <!-- 5. Recomendaciones Operativas -->
+        <div style="margin-top: 16px; background: rgba(139, 92, 246, 0.08); border: 1px solid rgba(139, 92, 246, 0.25); border-radius: 12px; padding: 18px;">
+          <div style="font-size: 0.9rem; font-weight: 700; color: #fff; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
+            <span>🎯</span> Recomendaciones Operativas Accionables
+          </div>
+          <ul class="feedback-recommendations-list" id="feedbackRecommendationsList">
+            <li>Analizando datos para generar recomendaciones...</li>
+          </ul>
         </div>
       </section>
     </div>
@@ -1245,16 +1419,16 @@
   <script src="./js/vendor/chart.umd.min.js"></script>
 
   <!-- Módulos de la Aplicación -->
-  <script src="./js/config.js?v=20261106_v100"></script>
-  <script src="./js/productivity-matrix.js?v=20261106_v100"></script>
-  <script src="./js/rules.js?v=20261106_v100"></script>
-  <script src="./js/storage-db.js?v=20261106_v100"></script>
-  <script src="./js/sheets-service.js?v=20261106_v100"></script>
-  <script src="./js/coverage-engine.js?v=20261106_v100"></script>
-  <script src="./js/charts.js?v=20261106_v100"></script>
-  <script src="./js/data.js?v=20261106_v100"></script>
-  <script src="./js/llamados-service.js?v=20261106_v100"></script>
-  <script src="./js/app.js?v=20261106_v100"></script>
+  <script src="./js/config.js?v=20261119_v101"></script>
+  <script src="./js/productivity-matrix.js?v=20261119_v101"></script>
+  <script src="./js/rules.js?v=20261119_v101"></script>
+  <script src="./js/storage-db.js?v=20261119_v101"></script>
+  <script src="./js/sheets-service.js?v=20261119_v101"></script>
+  <script src="./js/coverage-engine.js?v=20261119_v101"></script>
+  <script src="./js/charts.js?v=20261119_v101"></script>
+  <script src="./js/data.js?v=20261119_v101"></script>
+  <script src="./js/llamados-service.js?v=20261119_v101"></script>
+  <script src="./js/app.js?v=20261119_v101"></script>
 </body>
 </html>
 

@@ -178,6 +178,18 @@ const ChartManager = {
       }
     };
 
+    
+    // Guardar métricas calculadas para renderizar tabla comparativa sincronizada
+    ChartManager._lastMonthVsMonthData = {
+      currLabel,
+      prevLabel,
+      currMet,
+      prevMet
+    };
+    if (typeof renderMonthVsMonthTable === 'function') {
+      renderMonthVsMonthTable(ChartManager._lastMonthVsMonthData);
+    }
+  
     this.instances[canvasId] = new Chart(ctx, {
       type: 'doughnut',
       data: {
@@ -1122,35 +1134,35 @@ const ChartManager = {
     }
 
     const calcPeriodMetrics = (shifts) => {
-      let evaluable = 0;
-      let attended = 0;
-      let cancels = 0;
-      let packages = 0;
-      let hours = 0;
+      if (typeof calculateModulo1Kpis === 'function') {
+        const kpis = calculateModulo1Kpis(shifts);
+        return {
+          evaluable: kpis.asistenciaRequiredCount,
+          attended: kpis.asistenciaCoveredCount,
+          missing: kpis.cuposFaltantesTotal,
+          cancels: (kpis.penalizedBreakdown?.totalCancels ?? kpis.penalizedBreakdown?.pilotCancel ?? 0),
+          covPct: kpis.asistenciaEffectivenessPct,
+          canPct: kpis.cancellationRatePct,
+          prod: kpis.fleetProductivityPaqH,
+          packages: kpis.totalPackages,
+          fullKpis: kpis
+        };
+      }
 
+      let evaluable = 0, attended = 0, cancels = 0, packages = 0, hours = 0;
       shifts.forEach(s => {
         const cls = typeof classifyShiftStatus === 'function' ? classifyShiftStatus(s.status) : null;
         const isEval = cls ? cls.evaluable : (s.evaluable !== undefined ? Boolean(s.evaluable) : !s.excluded);
         const isAtt = cls ? cls.attended : Boolean(s.attended);
         const isCanc = cls ? cls.pilotCancel : Boolean(s.pilot_cancel);
-
-        if (isEval) {
-          evaluable++;
-          if (isAtt) attended++;
-          if (isCanc) cancels++;
-        }
-        if (isAtt) {
-          packages += (s.packages || 0);
-          hours += (s.hours || 8);
-        }
+        if (isEval) { evaluable++; if (isAtt) attended++; if (isCanc) cancels++; }
+        if (isAtt) { packages += (s.packages || 0); hours += (s.hours || 8); }
       });
-
       const missing = Math.max(0, evaluable - attended);
       const covPct = evaluable > 0 ? (attended / evaluable) * 100 : null;
       const canPct = evaluable > 0 ? (cancels / evaluable) * 100 : null;
       const prod = hours > 0 ? (packages / hours) : null;
-
-      return { evaluable, attended, missing, cancels, covPct, canPct, prod, packages };
+      return { evaluable, attended, missing, cancels, covPct, canPct, prod, packages, fullKpis: null };
     };
 
     const currMet = calcPeriodMetrics(currShifts);

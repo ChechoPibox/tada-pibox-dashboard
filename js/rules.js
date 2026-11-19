@@ -1592,3 +1592,316 @@ const RankingFlotaCriticaEngine = {
     return list.slice(0, 3);
   }
 };
+
+
+// ============================================================
+// MÓDULO 3 — INTELIGENCIA OPERATIVA & ANALÍTICA AVANZADA (v101)
+// Motores de Cobertura por Punto, Rankings Positivos y Feedback
+// ============================================================
+
+const Modulo3IntelligenceEngine = {
+
+  /**
+   * REQUERIMIENTO 2: Cobertura y Faltantes por Punto con Porcentaje de Reemplazos
+   * Aplica match transversal riguroso y concilia:
+   * - Solicitados (Turnos requeridos = Cubiertos + Faltantes)
+   * - Confirmados (Cubiertos sin reemplazo)
+   * - Cubiertos (Efectivamente operados)
+   * - Faltantes (Cancelados sin reemplazo + no programado + sin piloto)
+   * - Reemplazos (Cantidad y % sobre turnos cubiertos)
+   */
+  computeStoreCoverageStats(shifts) {
+    if (!shifts || shifts.length === 0) return [];
+    const storeMap = {};
+
+    shifts.forEach(s => {
+      const rawStore = String(s.store || '').trim();
+      if (!rawStore) return;
+      const city = s.city || '—';
+      const key = city + '__' + rawStore;
+      if (!storeMap[key]) {
+        storeMap[key] = {
+          store: rawStore,
+          city: city,
+          shifts: []
+        };
+      }
+      storeMap[key].shifts.push(s);
+    });
+
+    const list = Object.values(storeMap).map(st => {
+      const match = typeof reconcileShiftsMatch === 'function'
+        ? reconcileShiftsMatch(st.shifts)
+        : null;
+
+      let requested = 0;
+      let covered = 0;
+      let missing = 0;
+      let replacements = 0;
+      let confirmed = 0;
+
+      if (match && match.groups) {
+        requested = match.totalSlotsRequired;
+        covered = match.totalSlotsCovered;
+        missing = match.totalSlotsMissing;
+        replacements = match.totalReplacements;
+        confirmed = Math.max(0, covered - replacements);
+      } else {
+        requested = st.shifts.length;
+        covered = st.shifts.filter(s => s.attended).length;
+        missing = Math.max(0, requested - covered);
+        replacements = st.shifts.filter(s => String(s.status || '').toLowerCase() === 'reemplazo').length;
+        confirmed = Math.max(0, covered - replacements);
+      }
+
+      const coveragePct = requested > 0 ? (covered / requested) * 100 : 100;
+      const missingPct = requested > 0 ? (missing / requested) * 100 : 0;
+      // % de reemplazos sobre turnos cubiertos (representación operativa de dependencia de suplentes)
+      const replacementsPct = covered > 0 ? (replacements / covered) * 100 : 0;
+
+      return {
+        store: st.store,
+        city: st.city,
+        requested,
+        confirmed,
+        covered,
+        missing,
+        replacements,
+        coveragePct: +coveragePct.toFixed(1),
+        missingPct: +missingPct.toFixed(1),
+        replacementsPct: +replacementsPct.toFixed(1)
+      };
+    });
+
+    return list.sort((a, b) => (b.missing - a.missing) || (a.coveragePct - b.coveragePct) || (b.requested - a.requested));
+  },
+
+  /**
+   * REQUERIMIENTO 4: TOP de Mejores Tiendas por Productividad
+   * Medición justa proporcional a horas trabajadas (paq/h) y tasa de asistencia
+   */
+  computeStoreProductivityRanking(shifts, topN = 5) {
+    if (!shifts || shifts.length === 0) return [];
+    const storeMap = {};
+
+    shifts.forEach(s => {
+      const rawStore = String(s.store || '').trim();
+      if (!rawStore) return;
+      const city = s.city || '—';
+      const key = city + '__' + rawStore;
+      if (!storeMap[key]) {
+        storeMap[key] = {
+          store: rawStore,
+          city: city,
+          shifts: []
+        };
+      }
+      storeMap[key].shifts.push(s);
+    });
+
+    const list = Object.values(storeMap).map(st => {
+      const match = typeof reconcileShiftsMatch === 'function' ? reconcileShiftsMatch(st.shifts) : null;
+      const requested = match ? match.totalSlotsRequired : st.shifts.length;
+      const attendedShifts = st.shifts.filter(s => s.attended);
+      const covered = attendedShifts.length;
+      const packages = attendedShifts.reduce((acc, s) => acc + (Number(s.packages) || 0), 0);
+      const hours = attendedShifts.reduce((acc, s) => acc + (Number(s.hours) || 8), 0);
+      const prodPaqH = hours > 0 ? (packages / hours) : 0;
+      const attendancePct = requested > 0 ? (covered / requested) * 100 : 0;
+
+      return {
+        store: st.store,
+        city: st.city,
+        packages,
+        covered,
+        hours,
+        prodPaqH: +prodPaqH.toFixed(2),
+        attendancePct: +attendancePct.toFixed(1)
+      };
+    }).filter(st => st.covered > 0);
+
+    // Ordenar por productividad descendente, desempate por paquetes y asistencia
+    list.sort((a, b) => (b.prodPaqH - a.prodPaqH) || (b.packages - a.packages) || (b.attendancePct - a.attendancePct));
+    return list.slice(0, topN);
+  },
+
+  /**
+   * REQUERIMIENTO 5: TOP de Mejores Pilotos (Productividad y Asistencia)
+   * Filtra turnos incompletos o sin piloto y exige volumen mínimo razonable
+   */
+  computePilotsRankings(shifts, topN = 5, minShifts = 1) {
+    if (!shifts || shifts.length === 0) return { topProd: [], topAtt: [] };
+    const pilotMap = {};
+
+    shifts.forEach(s => {
+      const pilotName = (s.pilot || '').trim();
+      const rawPilotId = (s.pilot_id || '').trim();
+      const cleanPilotId = (rawPilotId && rawPilotId !== '—' && rawPilotId !== '-' && rawPilotId.toLowerCase() !== 'null' && rawPilotId.toLowerCase() !== 'undefined') ? rawPilotId.toLowerCase() : '';
+      const key = cleanPilotId ? ('ID_' + cleanPilotId) : (pilotName.toLowerCase() || null);
+      if (!key || key === '—' || key.toLowerCase() === 'sin piloto') return;
+
+      if (!pilotMap[key]) {
+        pilotMap[key] = {
+          pilot: pilotName || rawPilotId || key,
+          pilot_id: rawPilotId || '—',
+          city: s.city || '—',
+          store: s.store || '—',
+          shifts: []
+        };
+      }
+      if (pilotMap[key].city === '—' && s.city && s.city !== '—') pilotMap[key].city = s.city;
+      if (pilotMap[key].store === '—' && s.store && s.store !== '—') pilotMap[key].store = s.store;
+      pilotMap[key].shifts.push(s);
+    });
+
+    const pilots = Object.values(pilotMap).map(p => {
+      const totalShifts = p.shifts.length;
+      const attendedShifts = p.shifts.filter(s => s.attended);
+      const attendedCount = attendedShifts.length;
+      const packages = attendedShifts.reduce((acc, s) => acc + (Number(s.packages) || 0), 0);
+      const hours = attendedShifts.reduce((acc, s) => acc + (Number(s.hours) || 8), 0);
+      const prodPaqH = hours > 0 ? (packages / hours) : 0;
+
+      // Cancelaciones imputables exclusivamente al piloto
+      const pilotCancels = p.shifts.filter(s => {
+        const rawSt = (s.status || '').toLowerCase().trim();
+        const isExcluded = (
+          rawSt.includes('tienda cerrada') ||
+          rawSt === 'cerrada' ||
+          rawSt.includes('adicional no autoriz') ||
+          rawSt.includes('cliente cancela') ||
+          rawSt.includes('cancela cliente') ||
+          rawSt.includes('adicional cancel') ||
+          rawSt.includes('no programado')
+        );
+        if (isExcluded) return false;
+        return Boolean(
+          s.pilot_cancel ||
+          rawSt === 'piloto cancela' ||
+          rawSt === 'cancela piloto' ||
+          (rawSt.includes('piloto') && rawSt.includes('cancel'))
+        );
+      }).length;
+
+      const evaluableShifts = attendedCount + pilotCancels;
+      const attendancePct = evaluableShifts > 0 ? (attendedCount / evaluableShifts) * 100 : 0;
+
+      return {
+        pilot: p.pilot,
+        pilot_id: p.pilot_id,
+        city: p.city,
+        store: p.store,
+        totalShifts,
+        attendedCount,
+        pilotCancels,
+        evaluableShifts,
+        packages,
+        hours,
+        prodPaqH: +prodPaqH.toFixed(2),
+        attendancePct: +attendancePct.toFixed(1)
+      };
+    }).filter(p => p.totalShifts >= minShifts);
+
+    const topProd = pilots.slice()
+      .filter(p => p.attendedCount > 0 && p.prodPaqH > 0)
+      .sort((a, b) => (b.prodPaqH - a.prodPaqH) || (b.packages - a.packages) || (b.attendancePct - a.attendancePct))
+      .slice(0, topN);
+
+    const topAtt = pilots.slice()
+      .filter(p => p.evaluableShifts > 0)
+      .sort((a, b) => (b.attendancePct - a.attendancePct) || (b.attendedCount - a.attendedCount) || (b.prodPaqH - a.prodPaqH))
+      .slice(0, topN);
+
+    return { topProd, topAtt };
+  },
+
+  /**
+   * REQUERIMIENTO 6: Feedback Ejecutivo y Recomendaciones Operativas
+   */
+  generateExecutiveFeedback(currKpis, prevKpis, topStores, topPilotsProd, topPilotsAtt, coverageStores) {
+    if (!currKpis) return null;
+
+    // Resumen general
+    const eff = currKpis.asistenciaEffectivenessPct != null ? currKpis.asistenciaEffectivenessPct.toFixed(1) + '%' : 'N/A';
+    const can = currKpis.cancellationRatePct != null ? currKpis.cancellationRatePct.toFixed(1) + '%' : 'N/A';
+    const cov = currKpis.cuposCoveragePct != null ? currKpis.cuposCoveragePct.toFixed(1) + '%' : 'N/A';
+    const prod = (currKpis.fleetProductivityPaqH || 0).toFixed(2);
+    const paqs = (currKpis.totalPackages || 0).toLocaleString();
+    const faltantes = currKpis.cuposFaltantesTotal || 0;
+
+    // Comparación histórica (frente a prevKpis si existe)
+    const historyDeltas = [];
+    if (prevKpis) {
+      if (currKpis.fleetProductivityPaqH != null && prevKpis.fleetProductivityPaqH != null) {
+        const diffP = +(currKpis.fleetProductivityPaqH - prevKpis.fleetProductivityPaqH).toFixed(2);
+        historyDeltas.push({
+          kpi: 'Productividad',
+          diff: diffP,
+          unit: 'paq/h',
+          favorable: diffP >= 0
+        });
+      }
+      if (currKpis.asistenciaEffectivenessPct != null && prevKpis.asistenciaEffectivenessPct != null) {
+        const diffA = +(currKpis.asistenciaEffectivenessPct - prevKpis.asistenciaEffectivenessPct).toFixed(1);
+        historyDeltas.push({
+          kpi: 'Efectividad Asistencia',
+          diff: diffA,
+          unit: '%',
+          favorable: diffA >= 0
+        });
+      }
+      if (currKpis.cancellationRatePct != null && prevKpis.cancellationRatePct != null) {
+        const diffC = +(currKpis.cancellationRatePct - prevKpis.cancellationRatePct).toFixed(1);
+        historyDeltas.push({
+          kpi: 'Tasa Cancelación',
+          diff: diffC,
+          unit: '%',
+          favorable: diffC <= 0 // menos cancelación es favorable
+        });
+      }
+    }
+
+    // Puntos críticos y oportunidades
+    const criticalStores = (coverageStores || []).filter(s => s.missing > 0).slice(0, 3);
+    const highReplacementStores = (coverageStores || []).filter(s => s.replacementsPct > 20).slice(0, 3);
+
+    // Recomendaciones accionables
+    const recommendations = [];
+    if (topStores && topStores.length > 0) {
+      recommendaciones = recommendations.concat([
+        `Replicar la planificación operativa y rotación de <strong>${topStores[0].store}</strong> (${topStores[0].prodPaqH} paq/h), líder en productividad.`
+      ]);
+    }
+    if (criticalStores.length > 0) {
+      const names = criticalStores.map(s => `${s.store} (${s.missing} faltantes)`).join(', ');
+      recommendations.push(`Reforzar la asignación preventiva y bancos de suplentes en: <strong>${names}</strong>.`);
+    }
+    if (highReplacementStores.length > 0) {
+      const repNames = highReplacementStores.map(s => `${s.store} (${s.replacementsPct}%)`).join(', ');
+      recommendations.push(`Auditar causas raíz de cancelaciones en tiendas con alta dependencia de reemplazos: <strong>${repNames}</strong>.`);
+    }
+    if (topPilotsAtt && topPilotsAtt.length > 0) {
+      recommendations.push(`Reconocer y fidelizar a pilotos élite de asistencia como <strong>${topPilotsAtt[0].pilot}</strong> (${topPilotsAtt[0].attendancePct}% cumplido).`);
+    }
+
+    return {
+      summary: `La operación registró <strong>${paqs} paquetes</strong> con una productividad promedio de <strong>${prod} paq/h</strong> y una cobertura de cupos del <strong>${cov}</strong>. La efectividad de asistencia se situó en <strong>${eff}</strong> con una tasa de cancelación del <strong>${can}</strong>.`,
+      faltantes,
+      historyDeltas,
+      topStore: topStores && topStores[0] ? topStores[0] : null,
+      topPilotProd: topPilotsProd && topPilotsProd[0] ? topPilotsProd[0] : null,
+      topPilotAtt: topPilotsAtt && topPilotsAtt[0] ? topPilotsAtt[0] : null,
+      criticalStores,
+      highReplacementStores,
+      recommendations
+    };
+  }
+};
+
+
+if (typeof window !== 'undefined') {
+  window.Modulo3IntelligenceEngine = Modulo3IntelligenceEngine;
+}
+if (typeof global !== 'undefined') {
+  global.Modulo3IntelligenceEngine = Modulo3IntelligenceEngine;
+}
