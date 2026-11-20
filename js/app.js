@@ -2395,6 +2395,7 @@ function renderModulo3Visuals() {
           return true;
         });
         ChartManager.renderCityStorePerformanceChart('chartCityStorePerformance', allMallaForCity, citySelect.value);
+        renderCityStoreOperationalAnalysis(allMallaForCity, citySelect.value);
       });
     }
   }
@@ -2412,6 +2413,7 @@ function renderModulo3Visuals() {
     return true;
   });
   ChartManager.renderCityStorePerformanceChart('chartCityStorePerformance', mallaForCityChart, citySelect?.value || '');
+  renderCityStoreOperationalAnalysis(mallaForCityChart, citySelect?.value || '');
 
   // Renderizar Gráfica 6: Comparativo Mes Actual vs. Mes Anterior con corte equivalente (Req 8)
   // Pasamos el período de la semana seleccionada para que el gráfico lo use como currentPeriod
@@ -4786,4 +4788,124 @@ function renderModulo3ExecutiveFeedback(currKpis, prevKpis, coverageStores, sele
       recEl.innerHTML = feedback.recommendations.map(r => `<li>${r}</li>`).join('');
     }
   }
+}
+
+
+// ============================================================
+// ANÁLISIS DINÁMICO POR CIUDAD Y TIENDA — Módulo 3
+// Renderiza el panel de interpretación ejecutiva debajo de
+// la gráfica "Desempeño Operativo por Ciudad y Tienda"
+// ============================================================
+function renderCityStoreOperationalAnalysis(shifts, selectedCity = '') {
+  const container = document.getElementById('containerCityStoreAnalysis');
+  if (!container) return;
+
+  if (typeof Modulo3IntelligenceEngine === 'undefined') {
+    container.innerHTML = '';
+    return;
+  }
+
+  if (!shifts || shifts.length === 0) {
+    container.innerHTML = '<div style="color:var(--text-muted); font-size:0.8rem; padding:8px 0;">Sin datos suficientes para generar el análisis.</div>';
+    return;
+  }
+
+  const data = Modulo3IntelligenceEngine.computeCityStoreAnalysis(shifts, selectedCity);
+
+  if (!data || data.mode === 'empty') {
+    container.innerHTML = '<div style="color:var(--text-muted); font-size:0.8rem; padding:8px 0;">Sin datos suficientes para generar el análisis en el periodo seleccionado.</div>';
+    return;
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  const kpiPill = (label, value, colorClass) =>
+    `<span style="display:inline-flex; align-items:center; gap:5px; background:rgba(255,255,255,0.05);
+      border:1px solid rgba(255,255,255,0.1); border-radius:20px; padding:3px 10px;
+      font-size:0.75rem; color:var(--text-secondary); white-space:nowrap;">
+      <span style="color:${colorClass}; font-weight:700;">${value}</span>
+      <span style="color:var(--text-muted);">${label}</span>
+    </span>`;
+
+  const statBlock = (icon, title, value, sub) =>
+    `<div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.07);
+      border-radius:10px; padding:10px 14px; min-width:0; flex:1;">
+      <div style="font-size:0.68rem; color:var(--text-muted); margin-bottom:3px;">${icon} ${title}</div>
+      <div style="font-size:0.9rem; font-weight:800; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${value}">${value}</div>
+      ${sub ? `<div style="font-size:0.68rem; color:var(--text-muted); margin-top:2px;">${sub}</div>` : ''}
+    </div>`;
+
+  // ── MODO TIENDA ───────────────────────────────────────────────────────────
+  if (data.mode === 'store') {
+    const { selectedCity: city, globalCityKpi: gk, bestStore, worstStore, worstCanc, avgProd, storeCount, findings } = data;
+
+    const covColor  = gk.coveragePct >= 90 ? '#34d399' : gk.coveragePct >= 80 ? '#fbbf24' : '#f87171';
+    const cancColor = gk.cancelPct <= 10 ? '#34d399' : gk.cancelPct <= 20 ? '#fbbf24' : '#f87171';
+    const prodColor = gk.prodPaqH >= 1.5 ? '#34d399' : gk.prodPaqH >= 0.8 ? '#fbbf24' : '#f87171';
+
+    container.innerHTML = `
+      <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
+        <span style="font-size:0.82rem; font-weight:700; color:#a78bfa;">🏪 Análisis por Tienda — ${escapeHtml(city)}</span>
+        <span style="font-size:0.72rem; color:var(--text-muted);">${storeCount} tiendas con actividad en el periodo</span>
+        <div style="display:flex; gap:6px; flex-wrap:wrap; margin-left:auto;">
+          ${kpiPill('cobertura', gk.coveragePct + '%', covColor)}
+          ${kpiPill('cancelac.', gk.cancelPct + '%', cancColor)}
+          ${kpiPill('prod. promedio', avgProd + ' paq/h', prodColor)}
+          ${kpiPill('reemplazos', gk.replacePct + '%', 'var(--text-muted)')}
+        </div>
+      </div>
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap:10px; margin-bottom:14px;">
+        ${bestStore  ? statBlock('🥇', 'Mayor Productividad',    escapeHtml(bestStore.name),  `${bestStore.kpi.prodPaqH} paq/h · ${bestStore.kpi.coveragePct}% cob.`) : ''}
+        ${worstStore ? statBlock('⚠️', 'Menor Cobertura',         escapeHtml(worstStore.name), `${worstStore.kpi.coveragePct}% cob. · ${worstStore.kpi.packages} pedidos`) : ''}
+        ${worstCanc  ? statBlock('🔴', 'Mayor Cancelación',       escapeHtml(worstCanc.name),  `${worstCanc.kpi.cancelPct}% tasa cancela.`) : ''}
+        ${statBlock('📦', 'Pedidos Totales', gk.packages.toLocaleString(), `${gk.hours.toFixed(0)}h operativas · ${storeCount} tiendas`)}
+      </div>
+      <div style="border-top:1px solid rgba(255,255,255,0.05); padding-top:10px;">
+        <div style="font-size:0.72rem; font-weight:700; color:var(--text-muted); letter-spacing:0.05em; margin-bottom:8px; text-transform:uppercase;">💡 Hallazgos y Recomendaciones</div>
+        <div style="display:flex; flex-direction:column; gap:5px;">
+          ${findings.map(f => `
+            <div style="display:flex; gap:8px; font-size:0.78rem; color:var(--text-secondary); line-height:1.5;">
+              <span style="flex-shrink:0;">${f.icon}</span>
+              <span>${f.text}</span>
+            </div>`).join('')}
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // ── MODO CIUDAD ───────────────────────────────────────────────────────────
+  const { globalKpi: gk, cities, bestCity, alertCity, highCancCity, avgProd, cityCount, findings } = data;
+
+  const covColor  = gk.coveragePct >= 90 ? '#34d399' : gk.coveragePct >= 80 ? '#fbbf24' : '#f87171';
+  const cancColor = gk.cancelPct <= 10 ? '#34d399' : gk.cancelPct <= 20 ? '#fbbf24' : '#f87171';
+  const prodColor = gk.prodPaqH >= 1.5 ? '#34d399' : gk.prodPaqH >= 0.8 ? '#fbbf24' : '#f87171';
+
+  container.innerHTML = `
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
+      <span style="font-size:0.82rem; font-weight:700; color:#38bdf8;">🏙️ Análisis General — Todas las Ciudades</span>
+      <span style="font-size:0.72rem; color:var(--text-muted);">${cityCount} ciudades con actividad en el periodo</span>
+      <div style="display:flex; gap:6px; flex-wrap:wrap; margin-left:auto;">
+        ${kpiPill('cobertura', gk.coveragePct + '%', covColor)}
+        ${kpiPill('cancelac.', gk.cancelPct + '%', cancColor)}
+        ${kpiPill('prod. promedio', avgProd + ' paq/h', prodColor)}
+        ${kpiPill('reemplazos', gk.replacePct + '%', 'var(--text-muted)')}
+      </div>
+    </div>
+    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap:10px; margin-bottom:14px;">
+      ${bestCity    ? statBlock('🥇', 'Mayor Productividad',    escapeHtml(bestCity.name),    `${bestCity.kpi.prodPaqH} paq/h · ${bestCity.kpi.coveragePct}% cob.`) : ''}
+      ${alertCity   ? statBlock('⚠️', 'Menor Cobertura',         escapeHtml(alertCity.name),   `${alertCity.kpi.coveragePct}% cob. · ${alertCity.kpi.cancelPct}% cancela.`) : ''}
+      ${highCancCity ? statBlock('🔴', 'Mayor Cancelación',      escapeHtml(highCancCity.name), `${highCancCity.kpi.cancelPct}% tasa cancela.`) : ''}
+      ${statBlock('📦', 'Pedidos Totales', gk.packages.toLocaleString(), `${gk.hours.toFixed(0)}h operativas · ${cityCount} ciudades`)}
+    </div>
+    <div style="border-top:1px solid rgba(255,255,255,0.05); padding-top:10px;">
+      <div style="font-size:0.72rem; font-weight:700; color:var(--text-muted); letter-spacing:0.05em; margin-bottom:8px; text-transform:uppercase;">💡 Hallazgos y Recomendaciones</div>
+      <div style="display:flex; flex-direction:column; gap:5px;">
+        ${findings.map(f => `
+          <div style="display:flex; gap:8px; font-size:0.78rem; color:var(--text-secondary); line-height:1.5;">
+            <span style="flex-shrink:0;">${f.icon}</span>
+            <span>${f.text}</span>
+          </div>`).join('')}
+      </div>
+    </div>
+  `;
 }

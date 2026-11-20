@@ -2038,6 +2038,208 @@ const Modulo3IntelligenceEngine = {
       highReplacementStores,
       recommendations
     };
+  },
+
+  /**
+   * ANÁLISIS DINÁMICO POR CIUDAD Y TIENDA
+   * Genera interpretación ejecutiva de indicadores por ciudad y/o tienda
+   * según el filtro activo del selector de la gráfica.
+   *
+   * @param {Array} shifts   - Turnos filtrados por semana+ciudad+tienda del header
+   * @param {string} selectedCity - Ciudad seleccionada en el selector de la gráfica ('' = todas)
+   * @returns {Object} análisis con niveles city y store
+   */
+  computeCityStoreAnalysis(shifts, selectedCity = '') {
+    if (!shifts || shifts.length === 0) {
+      return { mode: 'empty', city: null, store: null };
+    }
+
+    const isStoreView = Boolean(selectedCity && selectedCity.trim() !== '');
+
+    // ── Función auxiliar: calcular KPIs de un grupo de turnos ────────────────
+    const computeGroupKpis = (groupShifts) => {
+      let totalShifts = 0, attended = 0, cancels = 0, reemplazos = 0,
+          packages = 0, hours = 0;
+
+      groupShifts.forEach(s => {
+        const st = (s.status || '').toLowerCase().trim();
+        const isPilotCancel = (st.includes('piloto') && st.includes('cancel')) || Boolean(s.pilot_cancel);
+        const isExcluded = (
+          st === 'tienda cerrada' || st === 'cerrada' ||
+          st.includes('cliente cancela') || st.includes('cancela cliente') ||
+          st.includes('adicional no autoriz') || st.includes('adicional autorizado') ||
+          st.includes('adicional cancel') || st.includes('no programado')
+        );
+        if (!isExcluded) {
+          totalShifts++;
+          if (s.attended) attended++;
+          if (isPilotCancel) cancels++;
+          if (st === 'reemplazo') reemplazos++;
+        }
+        if (s.attended) {
+          packages += (Number(s.packages) || 0);
+          hours    += (Number(s.hours)    || 8);
+        }
+      });
+
+      const coveragePct  = totalShifts > 0 ? +((attended / totalShifts) * 100).toFixed(1) : 0;
+      const cancelPct    = totalShifts > 0 ? +((cancels  / totalShifts) * 100).toFixed(1) : 0;
+      const replacePct   = attended > 0    ? +((reemplazos / attended)  * 100).toFixed(1) : 0;
+      const prodPaqH     = hours > 0       ? +(packages / hours).toFixed(2)               : 0;
+      return { totalShifts, attended, cancels, reemplazos, packages, hours,
+               coveragePct, cancelPct, replacePct, prodPaqH };
+    };
+
+    // ── MODO TIENDA: ciudad seleccionada → comparar sus tiendas ─────────────
+    if (isStoreView) {
+      const cityShifts = shifts.filter(s =>
+        (s.city || '').toLowerCase() === selectedCity.toLowerCase()
+      );
+      if (cityShifts.length === 0) return { mode: 'empty', city: null, store: null };
+
+      // Agrupar por tienda
+      const storeMap = {};
+      cityShifts.forEach(s => {
+        const key = (s.store || 'Sin Tienda').trim();
+        if (!storeMap[key]) storeMap[key] = { name: key, shifts: [] };
+        storeMap[key].shifts.push(s);
+      });
+
+      const stores = Object.values(storeMap)
+        .map(st => ({ name: st.name, kpi: computeGroupKpis(st.shifts), count: st.shifts.length }))
+        .filter(st => st.kpi.totalShifts > 0)
+        .sort((a, b) => b.kpi.totalShifts - a.kpi.totalShifts);
+
+      if (stores.length === 0) return { mode: 'empty', city: null, store: null };
+
+      const globalCityKpi = computeGroupKpis(cityShifts);
+
+      // Rankings
+      const byProd    = stores.slice().sort((a, b) => b.kpi.prodPaqH - a.kpi.prodPaqH);
+      const byCovLow  = stores.slice().sort((a, b) => a.kpi.coveragePct - b.kpi.coveragePct);
+      const byCancHi  = stores.slice().sort((a, b) => b.kpi.cancelPct  - a.kpi.cancelPct);
+
+      const bestStore  = byProd[0];
+      const worstStore = byCovLow[0];
+      const worstCanc  = byCancHi[0];
+
+      const avgProd    = stores.length > 0
+        ? +(stores.reduce((a, s) => a + s.kpi.prodPaqH, 0) / stores.length).toFixed(2) : 0;
+
+      // Hallazgos
+      const findings = [];
+      if (globalCityKpi.coveragePct < 85) {
+        findings.push({ icon: '🔴', text: `Cobertura general de la ciudad por debajo del umbral (${globalCityKpi.coveragePct}%). Verificar disponibilidad de pilotos.` });
+      } else if (globalCityKpi.coveragePct >= 95) {
+        findings.push({ icon: '🟢', text: `Cobertura en ${selectedCity} es sólida (${globalCityKpi.coveragePct}%). La operación está bien cubierta.` });
+      }
+
+      if (worstCanc && worstCanc.kpi.cancelPct > 20) {
+        findings.push({ icon: '⚠️', text: `${worstCanc.name} concentra la mayor tasa de cancelación (${worstCanc.kpi.cancelPct}%). Requiere seguimiento prioritario.` });
+      }
+
+      if (bestStore && worstStore && bestStore.name !== worstStore.name) {
+        const diff = +(bestStore.kpi.prodPaqH - worstStore.kpi.prodPaqH).toFixed(2);
+        if (diff > 0.3) {
+          findings.push({ icon: '📊', text: `Brecha de productividad de ${diff} paq/h entre ${bestStore.name} (${bestStore.kpi.prodPaqH}) y ${worstStore.name} (${worstStore.kpi.prodPaqH}).` });
+        }
+      }
+
+      if (globalCityKpi.replacePct > 25) {
+        findings.push({ icon: '🔄', text: `Alta dependencia de reemplazos (${globalCityKpi.replacePct}% de turnos cubiertos por suplentes). Evaluar estabilidad de planta.` });
+      }
+
+      if (findings.length === 0) {
+        findings.push({ icon: '✅', text: `Operación equilibrada en ${selectedCity}. Todos los indicadores dentro de rangos aceptables.` });
+      }
+
+      return {
+        mode: 'store',
+        selectedCity,
+        globalCityKpi,
+        stores,
+        bestStore,
+        worstStore,
+        worstCanc,
+        avgProd,
+        storeCount: stores.length,
+        findings
+      };
+    }
+
+    // ── MODO CIUDAD: "Todas las ciudades" → comparar ciudades ────────────────
+    const cityMap = {};
+    shifts.forEach(s => {
+      const key = (s.city || 'Sin Ciudad').trim();
+      if (!cityMap[key]) cityMap[key] = { name: key, shifts: [] };
+      cityMap[key].shifts.push(s);
+    });
+
+    const cities = Object.values(cityMap)
+      .map(c => ({ name: c.name, kpi: computeGroupKpis(c.shifts) }))
+      .filter(c => c.kpi.totalShifts > 0)
+      .sort((a, b) => b.kpi.totalShifts - a.kpi.totalShifts);
+
+    if (cities.length === 0) return { mode: 'empty', city: null, store: null };
+
+    const globalKpi = computeGroupKpis(shifts);
+
+    // Rankings ciudades
+    const byProd   = cities.slice().sort((a, b) => b.kpi.prodPaqH    - a.kpi.prodPaqH);
+    const byCov    = cities.slice().sort((a, b) => b.kpi.coveragePct - a.kpi.coveragePct);
+    const byCovLow = cities.slice().sort((a, b) => a.kpi.coveragePct - b.kpi.coveragePct);
+    const byCancHi = cities.slice().sort((a, b) => b.kpi.cancelPct   - a.kpi.cancelPct);
+
+    const bestCity    = byProd[0];
+    const alertCity   = byCovLow[0];
+    const highCancCity = byCancHi[0];
+
+    const avgProd = cities.length > 0
+      ? +(cities.reduce((a, c) => a + c.kpi.prodPaqH, 0) / cities.length).toFixed(2) : 0;
+
+    // Hallazgos
+    const findings = [];
+    if (globalKpi.coveragePct >= 90) {
+      findings.push({ icon: '🟢', text: `Cobertura operativa global sólida: ${globalKpi.coveragePct}% de turnos cubiertos en todas las ciudades.` });
+    } else {
+      findings.push({ icon: '🔴', text: `Cobertura global por debajo del 90% (${globalKpi.coveragePct}%). Revisar disponibilidad de pilotos.` });
+    }
+
+    if (alertCity && alertCity.kpi.coveragePct < 85) {
+      findings.push({ icon: '⚠️', text: `${alertCity.name} registra la menor cobertura (${alertCity.kpi.coveragePct}%). Priorizar intervención inmediata.` });
+    }
+
+    if (highCancCity && highCancCity.kpi.cancelPct > 15) {
+      findings.push({ icon: '📋', text: `${highCancCity.name} presenta la mayor tasa de cancelación (${highCancCity.kpi.cancelPct}%). Evaluar causas y acciones de retención.` });
+    }
+
+    if (bestCity && alertCity && bestCity.name !== alertCity.name) {
+      const diff = +(bestCity.kpi.prodPaqH - alertCity.kpi.prodPaqH).toFixed(2);
+      if (diff > 0.2) {
+        findings.push({ icon: '📊', text: `Diferencia de productividad entre ciudades: ${bestCity.name} lidera con ${bestCity.kpi.prodPaqH} paq/h vs ${alertCity.name} con ${alertCity.kpi.prodPaqH} paq/h.` });
+      }
+    }
+
+    if (globalKpi.replacePct > 20) {
+      findings.push({ icon: '🔄', text: `${globalKpi.replacePct}% de turnos cubiertos por reemplazos a nivel general. Alta rotación o ausentismo en la operación.` });
+    }
+
+    if (findings.length === 0) {
+      findings.push({ icon: '✅', text: 'Operación estable en todas las ciudades. Los indicadores se encuentran dentro de rangos aceptables.' });
+    }
+
+    return {
+      mode: 'city',
+      selectedCity: '',
+      globalKpi,
+      cities,
+      bestCity,
+      alertCity,
+      highCancCity,
+      avgProd,
+      cityCount: cities.length,
+      findings
+    };
   }
 };
 
