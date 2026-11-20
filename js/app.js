@@ -622,6 +622,43 @@ async function initApp() {
     });
   });
 
+  // Listeners de botones TOP 3 / TOP 5 independientes para Alertas Operativas en Módulo 3
+  document.querySelectorAll('.btn-alert-store-filter').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      document.querySelectorAll('.btn-alert-store-filter').forEach(b => b.classList.remove('active'));
+      e.target.classList.add('active');
+      const topN = parseInt(e.target.getAttribute('data-top') || '3', 10);
+      AppState._currentAlertTopStoresN = topN;
+      if (AppState._currentModulo3TargetShifts) {
+        renderAlertTopStores(AppState._currentModulo3TargetShifts, topN);
+      }
+    });
+  });
+
+  document.querySelectorAll('.btn-alert-pilot-prod-filter').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      document.querySelectorAll('.btn-alert-pilot-prod-filter').forEach(b => b.classList.remove('active'));
+      e.target.classList.add('active');
+      const topN = parseInt(e.target.getAttribute('data-top') || '3', 10);
+      AppState._currentAlertPilotsProdN = topN;
+      if (AppState._currentModulo3TargetShifts) {
+        renderAlertTopPilotsProd(AppState._currentModulo3TargetShifts, topN);
+      }
+    });
+  });
+
+  document.querySelectorAll('.btn-alert-pilot-att-filter').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      document.querySelectorAll('.btn-alert-pilot-att-filter').forEach(b => b.classList.remove('active'));
+      e.target.classList.add('active');
+      const topN = parseInt(e.target.getAttribute('data-top') || '3', 10);
+      AppState._currentAlertPilotsAttN = topN;
+      if (AppState._currentModulo3TargetShifts) {
+        renderAlertTopPilotsAtt(AppState._currentModulo3TargetShifts, topN);
+      }
+    });
+  });
+
   // Filtro de tienda en tabla de Cobertura y Faltantes por Punto
   document.getElementById('inputFilterCoverageStoreTable')?.addEventListener('input', () => {
     if (AppState._currentModulo3TargetShifts) {
@@ -643,7 +680,7 @@ async function initApp() {
     const meta = await TaDaDB.getMeta('last_sync');
 
     // Detectar caché obsoleto, incompleto o con esquema previo
-    const CACHE_VERSION = '2026-11-20-v104-coverage-legend-complete';
+    const CACHE_VERSION = '2026-11-20-v105-alerts-rankings-modulo3';
     const cachedVersion = await TaDaDB.getMeta('cache_version');
     const versionMismatch = cachedVersion !== CACHE_VERSION;
     const cachedCities = new Set(cachedMalla.map(r => r.city).filter(Boolean));
@@ -2392,6 +2429,9 @@ function renderModulo3Visuals() {
 
   // 2. Renderizar TOPs de Tiendas y Pilotos por Productividad y Asistencia (Req 4 y 5)
   renderModulo3RecognitionRankings(targetMalla, currentTopN);
+
+  // 2.1 Renderizar Alertas Operativas: Tiendas y Pilotos por Mejorar
+  renderModulo3AlertRankings(targetMalla);
 
   // 3. Renderizar Feedback Ejecutivo y Recomendaciones Operativas (Req 6)
   const currentWeekKpis = typeof calculateModulo1Kpis === 'function' ? calculateModulo1Kpis(targetMalla, APP_CONFIG) : null;
@@ -4544,6 +4584,119 @@ function renderModulo3RecognitionRankings(targetShifts, topPilotsN = 3) {
       `).join('');
     }
   }
+}
+
+/**
+ * REQUERIMIENTO ALERTAS: Renderiza la sección de Alertas Operativas (Tiendas y Pilotos por Mejorar)
+ */
+function renderModulo3AlertRankings(targetShifts) {
+  if (typeof Modulo3IntelligenceEngine === 'undefined') return;
+  const storeTopN = AppState._currentAlertTopStoresN || 3;
+  const pilotProdTopN = AppState._currentAlertPilotsProdN || 3;
+  const pilotAttTopN = AppState._currentAlertPilotsAttN || 3;
+
+  renderAlertTopStores(targetShifts, storeTopN);
+  renderAlertTopPilotsProd(targetShifts, pilotProdTopN);
+  renderAlertTopPilotsAtt(targetShifts, pilotAttTopN);
+}
+
+function getAlertRankBadge(idx) {
+  const rank = idx + 1;
+  const cls = rank <= 3 ? `alert-rank-${rank}` : 'alert-rank-standard';
+  return `<span class="alert-rank-badge ${cls}">#${rank}</span>`;
+}
+
+function renderAlertTopStores(targetShifts, topN = 3) {
+  if (typeof Modulo3IntelligenceEngine === 'undefined') return;
+  const titleStores = document.getElementById('titleAlertTopStores');
+  if (titleStores) titleStores.innerText = `🏪 TOP ${topN} Tiendas Menor Productividad`;
+
+  const cStores = document.getElementById('containerAlertTopStores');
+  if (!cStores) return;
+
+  const list = Modulo3IntelligenceEngine.computeStoreLowestProductivityRanking(targetShifts, topN);
+  if (!list || list.length === 0) {
+    cStores.innerHTML = '<div style="padding:16px; color:#34d399; font-size:0.8rem; text-align:center;">✅ No se registran alertas operativas críticas en el periodo seleccionado.</div>';
+    return;
+  }
+
+  cStores.innerHTML = list.map((st, i) => `
+    <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 12px; margin-bottom:8px; background:rgba(255,255,255,0.02); border:1px solid rgba(239,68,68,0.2); border-radius:10px;">
+      <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+        ${getAlertRankBadge(i)}
+        <div style="min-width:0;">
+          <div style="font-weight:700; color:#fff; font-size:0.82rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(st.store)}</div>
+          <div style="font-size:0.72rem; color:var(--text-muted);">${escapeHtml(st.city)} · ${st.packages} pedidos · ${st.hours}h op.</div>
+        </div>
+      </div>
+      <div style="text-align:right; flex-shrink:0; margin-left:10px;">
+        <div style="font-size:0.95rem; font-weight:800; color:#f87171;">${st.prodPaqH} <span style="font-size:0.7rem; color:var(--text-muted); font-weight:400;">paq/h</span></div>
+        <div style="font-size:0.72rem; color:var(--text-muted);">${st.covered} turnos · ${st.attendancePct}% asist</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderAlertTopPilotsProd(targetShifts, topN = 3) {
+  if (typeof Modulo3IntelligenceEngine === 'undefined') return;
+  const titleProd = document.getElementById('titleAlertPilotsProd');
+  if (titleProd) titleProd.innerText = `🛵 TOP ${topN} Pilotos Menor Productividad`;
+
+  const cPilotsProd = document.getElementById('containerAlertPilotsProductivity');
+  if (!cPilotsProd) return;
+
+  const { lowestProd } = Modulo3IntelligenceEngine.computePilotsAlertRankings(targetShifts, topN, 1);
+  if (!lowestProd || lowestProd.length === 0) {
+    cPilotsProd.innerHTML = '<div style="padding:16px; color:#34d399; font-size:0.8rem; text-align:center;">✅ No se registran alertas operativas críticas en el periodo seleccionado.</div>';
+    return;
+  }
+
+  cPilotsProd.innerHTML = lowestProd.map((p, i) => `
+    <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 12px; margin-bottom:8px; background:rgba(255,255,255,0.02); border:1px solid rgba(239,68,68,0.2); border-radius:10px;">
+      <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+        ${getAlertRankBadge(i)}
+        <div style="min-width:0;">
+          <div style="font-weight:700; color:#fff; font-size:0.82rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(p.pilot)}</div>
+          <div style="font-size:0.72rem; color:var(--text-muted);">${escapeHtml(p.store)} · ${escapeHtml(p.city)} · ${p.packages} pedidos · ${p.hours}h trab.</div>
+        </div>
+      </div>
+      <div style="text-align:right; flex-shrink:0; margin-left:10px;">
+        <div style="font-size:0.95rem; font-weight:800; color:#f87171;">${p.prodPaqH} <span style="font-size:0.7rem; color:var(--text-muted); font-weight:400;">paq/h</span></div>
+        <div style="font-size:0.72rem; color:var(--text-muted);">${p.attendedCount} turnos asistidos</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderAlertTopPilotsAtt(targetShifts, topN = 3) {
+  if (typeof Modulo3IntelligenceEngine === 'undefined') return;
+  const titleAtt = document.getElementById('titleAlertPilotsAtt');
+  if (titleAtt) titleAtt.innerText = `⚠️ TOP ${topN} Pilotos Peor Asistencia`;
+
+  const cPilotsAtt = document.getElementById('containerAlertPilotsAttendance');
+  if (!cPilotsAtt) return;
+
+  const { worstAtt } = Modulo3IntelligenceEngine.computePilotsAlertRankings(targetShifts, 1, topN);
+  if (!worstAtt || worstAtt.length === 0) {
+    cPilotsAtt.innerHTML = '<div style="padding:16px; color:#34d399; font-size:0.8rem; text-align:center;">✅ No se registran alertas operativas críticas en el periodo seleccionado.</div>';
+    return;
+  }
+
+  cPilotsAtt.innerHTML = worstAtt.map((p, i) => `
+    <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 12px; margin-bottom:8px; background:rgba(255,255,255,0.02); border:1px solid rgba(239,68,68,0.2); border-radius:10px;">
+      <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+        ${getAlertRankBadge(i)}
+        <div style="min-width:0;">
+          <div style="font-weight:700; color:#fff; font-size:0.82rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(p.pilot)}</div>
+          <div style="font-size:0.72rem; color:var(--text-muted);">${escapeHtml(p.store)} · ${p.attendedCount} asistencias · ${p.pilotCancels} inasistencias de ${p.evaluableShifts} prog.</div>
+        </div>
+      </div>
+      <div style="text-align:right; flex-shrink:0; margin-left:10px;">
+        <div style="font-size:0.95rem; font-weight:800; color:#ef4444;">${p.attendancePct}%</div>
+        <div style="font-size:0.72rem; color:#f87171;">${p.pilotCancels} inasistencias</div>
+      </div>
+    </div>
+  `).join('');
 }
 
 /**

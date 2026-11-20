@@ -10,7 +10,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   
-  <link rel="stylesheet" href="./css/styles.css?v=20261120_v104">
+  <link rel="stylesheet" href="./css/styles.css?v=20261120_v105">
   <link rel="icon" href="./assets/logo_pibox_tada.jpg" type="image/jpeg">
 </head>
 <body>
@@ -859,6 +859,63 @@
         </div>
       </section>
 
+      <!-- BLOQUE 2.1: ALERTAS OPERATIVAS — TIENDAS Y PILOTOS POR MEJORAR -->
+      <section class="section-panel alert-section-card" style="margin-bottom: 20px; border-left: 4px solid #ef4444;">
+        <div class="panel-header" style="flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;">
+          <div>
+            <div class="panel-title" style="font-size: 1.05rem; display: flex; align-items: center; gap: 8px;">
+              <span>⚠️</span> Alertas Operativas — Tiendas y Pilotos por Mejorar
+            </div>
+            <div class="panel-subtitle" style="font-size: 0.78rem;">Puntos y conductores que requieren seguimiento prioritario en productividad y cumplimiento de asistencia</div>
+          </div>
+          <span class="pill pill-bad" style="font-size:0.75rem; font-weight:700;">Seguimiento Prioritario</span>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; margin-top: 14px;">
+          <!-- 1. Tiendas con Menor Productividad -->
+          <div class="section-panel" style="background: var(--bg-card); margin-bottom: 0; padding: 16px;">
+            <div class="panel-header" style="padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.06); margin-bottom: 12px; flex-wrap: wrap; gap: 8px; justify-content: space-between;">
+              <div class="panel-title" style="font-size: 0.9rem;" id="titleAlertTopStores">🏪 Tiendas Menor Productividad</div>
+              <div class="btn-group-utilities" style="display:inline-flex; gap: 4px;">
+                <button type="button" class="btn btn-secondary btn-alert-store-filter active" data-top="3" style="padding: 3px 8px; font-size: 0.72rem; font-weight: 700;">TOP 3</button>
+                <button type="button" class="btn btn-secondary btn-alert-store-filter" data-top="5" style="padding: 3px 8px; font-size: 0.72rem; font-weight: 700;">TOP 5</button>
+              </div>
+            </div>
+            <div id="containerAlertTopStores">
+              <!-- Renderizado dinámicamente -->
+            </div>
+          </div>
+
+          <!-- 2. Pilotos con Menor Productividad -->
+          <div class="section-panel" style="background: var(--bg-card); margin-bottom: 0; padding: 16px;">
+            <div class="panel-header" style="padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.06); margin-bottom: 12px; flex-wrap: wrap; gap: 8px; justify-content: space-between;">
+              <div class="panel-title" style="font-size: 0.9rem;" id="titleAlertPilotsProd">🛵 Pilotos Menor Productividad</div>
+              <div class="btn-group-utilities" style="display:inline-flex; gap: 4px;">
+                <button type="button" class="btn btn-secondary btn-alert-pilot-prod-filter active" data-top="3" style="padding: 3px 8px; font-size: 0.72rem; font-weight: 700;">TOP 3</button>
+                <button type="button" class="btn btn-secondary btn-alert-pilot-prod-filter" data-top="5" style="padding: 3px 8px; font-size: 0.72rem; font-weight: 700;">TOP 5</button>
+              </div>
+            </div>
+            <div id="containerAlertPilotsProductivity">
+              <!-- Renderizado dinámicamente -->
+            </div>
+          </div>
+
+          <!-- 3. Pilotos con Peor Asistencia -->
+          <div class="section-panel" style="background: var(--bg-card); margin-bottom: 0; padding: 16px;">
+            <div class="panel-header" style="padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.06); margin-bottom: 12px; flex-wrap: wrap; gap: 8px; justify-content: space-between;">
+              <div class="panel-title" style="font-size: 0.9rem;" id="titleAlertPilotsAtt">⚠️ Pilotos Mayor Inasistencia</div>
+              <div class="btn-group-utilities" style="display:inline-flex; gap: 4px;">
+                <button type="button" class="btn btn-secondary btn-alert-pilot-att-filter active" data-top="3" style="padding: 3px 8px; font-size: 0.72rem; font-weight: 700;">TOP 3</button>
+                <button type="button" class="btn btn-secondary btn-alert-pilot-att-filter" data-top="5" style="padding: 3px 8px; font-size: 0.72rem; font-weight: 700;">TOP 5</button>
+              </div>
+            </div>
+            <div id="containerAlertPilotsAttendance">
+              <!-- Renderizado dinámicamente -->
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- Panel de Tendencia y Comparativo Histórico Semana a Semana -->
       <section class="section-panel">
         <div class="panel-header">
@@ -1423,16 +1480,16 @@
   <script src="./js/vendor/chart.umd.min.js"></script>
 
   <!-- Módulos de la Aplicación -->
-  <script src="./js/config.js?v=20261120_v104"></script>
-  <script src="./js/productivity-matrix.js?v=20261120_v104"></script>
-  <script src="./js/rules.js?v=20261120_v104"></script>
-  <script src="./js/storage-db.js?v=20261120_v104"></script>
-  <script src="./js/sheets-service.js?v=20261120_v104"></script>
-  <script src="./js/coverage-engine.js?v=20261120_v104"></script>
-  <script src="./js/charts.js?v=20261120_v104"></script>
-  <script src="./js/data.js?v=20261120_v104"></script>
-  <script src="./js/llamados-service.js?v=20261120_v104"></script>
-  <script src="./js/app.js?v=20261120_v104"></script>
+  <script src="./js/config.js?v=20261120_v105"></script>
+  <script src="./js/productivity-matrix.js?v=20261120_v105"></script>
+  <script src="./js/rules.js?v=20261120_v105"></script>
+  <script src="./js/storage-db.js?v=20261120_v105"></script>
+  <script src="./js/sheets-service.js?v=20261120_v105"></script>
+  <script src="./js/coverage-engine.js?v=20261120_v105"></script>
+  <script src="./js/charts.js?v=20261120_v105"></script>
+  <script src="./js/data.js?v=20261120_v105"></script>
+  <script src="./js/llamados-service.js?v=20261120_v105"></script>
+  <script src="./js/app.js?v=20261120_v105"></script>
 </body>
 </html>
 

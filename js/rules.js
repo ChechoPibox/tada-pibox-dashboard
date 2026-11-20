@@ -1816,6 +1816,149 @@ const Modulo3IntelligenceEngine = {
   },
 
   /**
+   * REQUERIMIENTO ALERTAS 1: TOP de Tiendas con Menor Productividad
+   * Muestra las tiendas con menor productividad efectiva (paq/h)
+   * Filtra tiendas con horas operativas trabajadas > 0
+   */
+  computeStoreLowestProductivityRanking(shifts, topN = 3) {
+    if (!shifts || shifts.length === 0) return [];
+    const storeMap = {};
+
+    shifts.forEach(s => {
+      const rawStore = String(s.store || '').trim();
+      if (!rawStore) return;
+      const city = s.city || '—';
+      const key = city + '__' + rawStore;
+      if (!storeMap[key]) {
+        storeMap[key] = {
+          store: rawStore,
+          city: city,
+          shifts: []
+        };
+      }
+      storeMap[key].shifts.push(s);
+    });
+
+    const list = Object.values(storeMap).map(st => {
+      const match = typeof reconcileShiftsMatch === 'function' ? reconcileShiftsMatch(st.shifts) : null;
+      const requested = match ? match.totalSlotsRequired : st.shifts.length;
+      const attendedShifts = st.shifts.filter(s => s.attended);
+      const covered = attendedShifts.length;
+      const packages = attendedShifts.reduce((acc, s) => acc + (Number(s.packages) || 0), 0);
+      const hours = attendedShifts.reduce((acc, s) => acc + (Number(s.hours) || 8), 0);
+      const prodPaqH = hours > 0 ? (packages / hours) : 0;
+      const attendancePct = requested > 0 ? (covered / requested) * 100 : 0;
+
+      return {
+        store: st.store,
+        city: st.city,
+        packages,
+        covered,
+        hours,
+        prodPaqH: +prodPaqH.toFixed(2),
+        attendancePct: +attendancePct.toFixed(1)
+      };
+    }).filter(st => st.covered > 0 && st.hours > 0);
+
+    // Ordenar por menor productividad (ascendente), desempate por menos paquetes
+    list.sort((a, b) => (a.prodPaqH - b.prodPaqH) || (a.packages - b.packages) || (a.attendancePct - b.attendancePct));
+    return list.slice(0, topN);
+  },
+
+  /**
+   * REQUERIMIENTO ALERTAS 2 y 3: TOP de Pilotos con Menor Productividad y Peor Asistencia
+   * Excluye muestras insuficientes y cancelaciones no imputables al piloto
+   */
+  computePilotsAlertRankings(shifts, topNProd = 3, topNAtt = 3) {
+    if (!shifts || shifts.length === 0) return { lowestProd: [], worstAtt: [] };
+    const pilotMap = {};
+
+    shifts.forEach(s => {
+      const pilotName = (s.pilot || '').trim();
+      const rawPilotId = (s.pilot_id || '').trim();
+      const cleanPilotId = (rawPilotId && rawPilotId !== '—' && rawPilotId !== '-' && rawPilotId.toLowerCase() !== 'null' && rawPilotId.toLowerCase() !== 'undefined') ? rawPilotId.toLowerCase() : '';
+      const key = cleanPilotId ? ('ID_' + cleanPilotId) : (pilotName.toLowerCase() || null);
+      if (!key || key === '—' || key.toLowerCase() === 'sin piloto') return;
+
+      if (!pilotMap[key]) {
+        pilotMap[key] = {
+          pilot: pilotName || rawPilotId || key,
+          pilot_id: rawPilotId || '—',
+          city: s.city || '—',
+          store: s.store || '—',
+          shifts: []
+        };
+      }
+      if (pilotMap[key].city === '—' && s.city && s.city !== '—') pilotMap[key].city = s.city;
+      if (pilotMap[key].store === '—' && s.store && s.store !== '—') pilotMap[key].store = s.store;
+      pilotMap[key].shifts.push(s);
+    });
+
+    const pilots = Object.values(pilotMap).map(p => {
+      const totalShifts = p.shifts.length;
+      const attendedShifts = p.shifts.filter(s => s.attended);
+      const attendedCount = attendedShifts.length;
+      const packages = attendedShifts.reduce((acc, s) => acc + (Number(s.packages) || 0), 0);
+      const hours = attendedShifts.reduce((acc, s) => acc + (Number(s.hours) || 8), 0);
+      const prodPaqH = hours > 0 ? (packages / hours) : 0;
+
+      // Cancelaciones imputables exclusivamente al piloto
+      const pilotCancels = p.shifts.filter(s => {
+        const rawSt = (s.status || '').toLowerCase().trim();
+        const isExcluded = (
+          rawSt.includes('tienda cerrada') ||
+          rawSt === 'cerrada' ||
+          rawSt.includes('adicional no autoriz') ||
+          rawSt.includes('cliente cancela') ||
+          rawSt.includes('cancela cliente') ||
+          rawSt.includes('adicional cancel') ||
+          rawSt.includes('no programado')
+        );
+        if (isExcluded) return false;
+        return Boolean(
+          s.pilot_cancel ||
+          rawSt === 'piloto cancela' ||
+          rawSt === 'cancela piloto' ||
+          (rawSt.includes('piloto') && rawSt.includes('cancel'))
+        );
+      }).length;
+
+      const evaluableShifts = attendedCount + pilotCancels;
+      const attendancePct = evaluableShifts > 0 ? (attendedCount / evaluableShifts) * 100 : 0;
+
+      return {
+        pilot: p.pilot,
+        pilot_id: p.pilot_id,
+        city: p.city,
+        store: p.store,
+        totalShifts,
+        attendedCount,
+        pilotCancels,
+        evaluableShifts,
+        packages,
+        hours,
+        prodPaqH: +prodPaqH.toFixed(2),
+        attendancePct: +attendancePct.toFixed(1)
+      };
+    });
+
+    // Menor productividad: pilotos que efectivamente operaron turnos (attendedCount >= 1 y hours >= 8)
+    const lowestProd = pilots.slice()
+      .filter(p => p.attendedCount >= 1 && p.hours >= 8)
+      .sort((a, b) => (a.prodPaqH - b.prodPaqH) || (a.packages - b.packages) || (a.attendancePct - b.attendancePct))
+      .slice(0, topNProd);
+
+    // Peor asistencia: pilotos con al menos 1 turno evaluable y con faltas (pilotCancels > 0)
+    // o menor % de asistencia
+    const worstAtt = pilots.slice()
+      .filter(p => p.evaluableShifts >= 1 && (p.pilotCancels > 0 || p.attendancePct < 100))
+      .sort((a, b) => (a.attendancePct - b.attendancePct) || (b.pilotCancels - a.pilotCancels) || (a.attendedCount - b.attendedCount))
+      .slice(0, topNAtt);
+
+    return { lowestProd, worstAtt };
+  },
+
+  /**
    * REQUERIMIENTO 6: Feedback Ejecutivo y Recomendaciones Operativas
    */
   generateExecutiveFeedback(currKpis, prevKpis, topStores, topPilotsProd, topPilotsAtt, coverageStores) {
