@@ -659,38 +659,15 @@ async function initApp() {
     });
   });
 
-  // Listeners de botones TOP 3 / TOP 5 independientes para Alertas Operativas en Módulo 3
-  document.querySelectorAll('.btn-alert-store-filter').forEach(btn => {
+  // Listener de botones TOP 3 / TOP 5 en Módulo 3 - Alertas Operativas (Tiendas y Pilotos por Mejorar)
+  document.querySelectorAll('.btn-alert-top-pilot-filter').forEach(btn => {
     btn.addEventListener('click', (e) => {
-      document.querySelectorAll('.btn-alert-store-filter').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.btn-alert-top-pilot-filter').forEach(b => b.classList.remove('active'));
       e.target.classList.add('active');
       const topN = parseInt(e.target.getAttribute('data-top') || '3', 10);
-      AppState._currentAlertTopStoresN = topN;
-      if (AppState._currentModulo3TargetShifts) {
-        renderAlertTopStores(AppState._currentModulo3TargetShifts, topN);
-      }
-    });
-  });
-
-  document.querySelectorAll('.btn-alert-pilot-prod-filter').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      document.querySelectorAll('.btn-alert-pilot-prod-filter').forEach(b => b.classList.remove('active'));
-      e.target.classList.add('active');
-      const topN = parseInt(e.target.getAttribute('data-top') || '3', 10);
-      AppState._currentAlertPilotsProdN = topN;
+      AppState._currentAlertTopPilotsN = topN;
       if (AppState._currentModulo3TargetShifts) {
         renderAlertTopPilotsProd(AppState._currentModulo3TargetShifts, topN);
-      }
-    });
-  });
-
-  document.querySelectorAll('.btn-alert-pilot-att-filter').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      document.querySelectorAll('.btn-alert-pilot-att-filter').forEach(b => b.classList.remove('active'));
-      e.target.classList.add('active');
-      const topN = parseInt(e.target.getAttribute('data-top') || '3', 10);
-      AppState._currentAlertPilotsAttN = topN;
-      if (AppState._currentModulo3TargetShifts) {
         renderAlertTopPilotsAtt(AppState._currentModulo3TargetShifts, topN);
       }
     });
@@ -2561,6 +2538,7 @@ function renderModulo3Visuals() {
   // Guardar en AppState para filtros reactivos
   AppState._currentModulo3TargetShifts = targetMalla;
   const currentTopN = AppState._currentTopPilotsN || 3;
+  const currentAlertTopN = AppState._currentAlertTopPilotsN || 3;
 
   // Calcular estadísticas de cobertura de tiendas una sola vez para reutilizarlas
   const coverageStoreStats = typeof Modulo3IntelligenceEngine !== 'undefined' ? Modulo3IntelligenceEngine.computeStoreCoverageStats(targetMalla) : [];
@@ -2572,7 +2550,7 @@ function renderModulo3Visuals() {
   renderModulo3RecognitionRankings(targetMalla, currentTopN);
 
   // 2.1 Renderizar Alertas Operativas: Tiendas y Pilotos por Mejorar
-  renderModulo3AlertRankings(targetMalla);
+  renderModulo3AlertRankings(targetMalla, currentAlertTopN);
 
   // 3. Renderizar Feedback Ejecutivo y Recomendaciones Operativas (Req 6)
   const currentWeekKpis = typeof calculateModulo1Kpis === 'function' ? calculateModulo1Kpis(targetMalla, APP_CONFIG) : null;
@@ -4739,15 +4717,14 @@ function renderModulo3RecognitionRankings(targetShifts, topPilotsN = 3) {
 /**
  * REQUERIMIENTO ALERTAS: Renderiza la sección de Alertas Operativas (Tiendas y Pilotos por Mejorar)
  */
-function renderModulo3AlertRankings(targetShifts) {
+function renderModulo3AlertRankings(targetShifts, topPilotsN = null) {
   if (typeof Modulo3IntelligenceEngine === 'undefined') return;
-  const storeTopN = AppState._currentAlertTopStoresN || 3;
-  const pilotProdTopN = AppState._currentAlertPilotsProdN || 3;
-  const pilotAttTopN = AppState._currentAlertPilotsAttN || 3;
+  const storeTopN = 5;
+  const pilotTopN = topPilotsN !== null ? topPilotsN : (AppState._currentAlertTopPilotsN || 3);
 
   renderAlertTopStores(targetShifts, storeTopN);
-  renderAlertTopPilotsProd(targetShifts, pilotProdTopN);
-  renderAlertTopPilotsAtt(targetShifts, pilotAttTopN);
+  renderAlertTopPilotsProd(targetShifts, pilotTopN);
+  renderAlertTopPilotsAtt(targetShifts, pilotTopN);
 }
 
 function getAlertRankBadge(idx) {
@@ -4756,7 +4733,7 @@ function getAlertRankBadge(idx) {
   return `<span class="alert-rank-badge ${cls}">#${rank}</span>`;
 }
 
-function renderAlertTopStores(targetShifts, topN = 3) {
+function renderAlertTopStores(targetShifts, topN = 5) {
   if (typeof Modulo3IntelligenceEngine === 'undefined') return;
   const titleStores = document.getElementById('titleAlertTopStores');
   if (titleStores) titleStores.innerText = `🏪 TOP ${topN} Tiendas Menor Productividad`;
@@ -4821,7 +4798,7 @@ function renderAlertTopPilotsProd(targetShifts, topN = 3) {
 function renderAlertTopPilotsAtt(targetShifts, topN = 3) {
   if (typeof Modulo3IntelligenceEngine === 'undefined') return;
   const titleAtt = document.getElementById('titleAlertPilotsAtt');
-  if (titleAtt) titleAtt.innerText = `⚠️ TOP ${topN} Pilotos Peor Asistencia`;
+  if (titleAtt) titleAtt.innerText = `⚠️ TOP ${topN} Pilotos Mayor Inasistencia`;
 
   const cPilotsAtt = document.getElementById('containerAlertPilotsAttendance');
   if (!cPilotsAtt) return;
