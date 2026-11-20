@@ -569,6 +569,60 @@ function reconcileShiftsMatch(shifts) {
     }
   });
 
+  // ----------------------------------------------------
+  // CONCILIACIÓN EN DOS FASES:
+  // Fase 1: Match exacto por fecha, tienda y minuto de inicio (date__store__startMin).
+  // Fase 2: Match complementario en la misma tienda y fecha para reemplazos sobrantes
+  //         que cubrieron cancelaciones con horas de ingreso ligeramente distintas (ej. 16:00 vs 17:00).
+  // ----------------------------------------------------
+  const storeDateBuckets = {};
+
+  Object.values(groups).forEach(g => {
+    const matched = Math.min(g.cancels, g.reemplazos);
+    const unmatched = Math.max(0, g.cancels - g.reemplazos);
+    const surplus = Math.max(0, g.reemplazos - g.cancels);
+    g.matched = matched;
+    g.unmatched = unmatched;
+    g.surplusReps = surplus;
+
+    const normSt = normalizeKeyStr(g.store);
+    const sdKey = `${g.date}__${normSt}`;
+    if (!storeDateBuckets[sdKey]) {
+      storeDateBuckets[sdKey] = { unmatchedCancelGroups: [], surplusRepGroups: [] };
+    }
+    if (unmatched > 0) storeDateBuckets[sdKey].unmatchedCancelGroups.push(g);
+    if (surplus > 0) storeDateBuckets[sdKey].surplusRepGroups.push(g);
+  });
+
+  // Fase 2: Dentro de la misma tienda y misma fecha, conciliar reemplazos sobrantes con cancelaciones pendientes
+  Object.values(storeDateBuckets).forEach(bucket => {
+    if (bucket.unmatchedCancelGroups.length > 0 && bucket.surplusRepGroups.length > 0) {
+      bucket.surplusRepGroups.sort((a, b) => a.startMin - b.startMin);
+      bucket.unmatchedCancelGroups.sort((a, b) => a.startMin - b.startMin);
+
+      bucket.surplusRepGroups.forEach(repG => {
+        while (repG.surplusReps > 0 && bucket.unmatchedCancelGroups.length > 0) {
+          let bestIdx = 0;
+          let minDiff = Infinity;
+          for (let i = 0; i < bucket.unmatchedCancelGroups.length; i++) {
+            const diff = Math.abs(bucket.unmatchedCancelGroups[i].startMin - repG.startMin);
+            if (diff < minDiff) {
+              minDiff = diff;
+              bestIdx = i;
+            }
+          }
+          const cancelG = bucket.unmatchedCancelGroups[bestIdx];
+          repG.surplusReps--;
+          cancelG.unmatched--;
+          cancelG.matched++;
+          if (cancelG.unmatched === 0) {
+            bucket.unmatchedCancelGroups.splice(bestIdx, 1);
+          }
+        }
+      });
+    }
+  });
+
   let totalSlotsRequired = 0;
   let totalSlotsCovered = 0;
   let totalSlotsMissing = 0;
@@ -595,14 +649,11 @@ function reconcileShiftsMatch(shifts) {
     totalSinPiloto += g.sinPiloto;
     totalExcluded += g.excluded;
 
-    const matched = Math.min(g.cancels, g.reemplazos);
-    const unmatched = Math.max(0, g.cancels - g.reemplazos);
-
-    totalMatchedReplacements += matched;
-    totalUnmatchedCancels += unmatched;
+    totalMatchedReplacements += g.matched;
+    totalUnmatchedCancels += g.unmatched;
 
     // Distribuir el match entre cancelaciones de piloto y de cliente
-    let rem = g.reemplazos;
+    let rem = g.matched;
     const mPilot = Math.min(g.pilotCancels || 0, rem);
     rem -= mPilot;
     const mClient = Math.min(g.clientCancels || 0, rem);
@@ -618,7 +669,7 @@ function reconcileShiftsMatch(shifts) {
 
     // Turnos faltantes en este grupo horario:
     // Cancelaciones sin reemplazo + no programados + vacantes sin piloto
-    const groupMissing = unmatched + g.noProgramado + g.sinPiloto;
+    const groupMissing = g.unmatched + g.noProgramado + g.sinPiloto;
 
     // Turnos totales requeridos:
     const groupRequired = groupCovered + groupMissing;
