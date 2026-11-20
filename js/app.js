@@ -5289,6 +5289,12 @@ function setupIntelligenceEventListeners() {
 
     if (inputEl) inputEl.value = '';
 
+    // Si contiene la bienvenida centrada inicial, removerla antes de insertar los mensajes de conversación
+    const welcomeEl = chatHist ? chatHist.querySelector('.intel-welcome-empty') : null;
+    if (welcomeEl) {
+      welcomeEl.remove();
+    }
+
     // Append mensaje del usuario
     if (chatHist) {
       chatHist.innerHTML += `
@@ -5340,8 +5346,14 @@ function setupIntelligenceEventListeners() {
   clearBtn?.addEventListener('click', () => {
     if (chatHist) {
       chatHist.innerHTML = `
-        <div style="background: rgba(30, 41, 59, 0.7); padding: 12px 16px; border-radius: 8px; border-left: 3px solid #8b5cf6; font-size: 0.85rem; line-height: 1.5; color: #e2e8f0;">
-          👋 <strong>¡Hola! Soy tu Analista Operativo IA.</strong> El historial fue limpiado. Puedes consultar cualquier duda operativa bajo los filtros activos.
+        <div class="intel-welcome-empty" style="margin: auto; padding: 26px 20px; background: rgba(30, 41, 59, 0.55); border: 1px solid rgba(139, 92, 246, 0.22); border-radius: 12px; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; max-width: 480px;">
+          <div style="width: 44px; height: 44px; border-radius: 50%; background: rgba(139, 92, 246, 0.2); border: 1px solid rgba(139, 92, 246, 0.4); display: flex; align-items: center; justify-content: center; font-size: 1.4rem;">
+            🤖
+          </div>
+          <strong style="color: #fff; font-size: 0.95rem;">¡Hola! Soy tu Analista Operativo IA</strong>
+          <p style="color: #cbd5e1; font-size: 0.82rem; line-height: 1.55; margin: 0; text-align: center;">
+            El historial fue limpiado. Selecciona una pregunta rápida arriba o escribe tu consulta operativa bajo los filtros activos.
+          </p>
         </div>
       `;
     }
