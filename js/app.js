@@ -643,7 +643,7 @@ async function initApp() {
     const meta = await TaDaDB.getMeta('last_sync');
 
     // Detectar caché obsoleto, incompleto o con esquema previo
-    const CACHE_VERSION = '2026-11-19-v102-modulo3-fix-currlabel-layout';
+    const CACHE_VERSION = '2026-11-20-v103-modulo3-store-coverage-indicators';
     const cachedVersion = await TaDaDB.getMeta('cache_version');
     const versionMismatch = cachedVersion !== CACHE_VERSION;
     const cachedCities = new Set(cachedMalla.map(r => r.city).filter(Boolean));
@@ -4254,9 +4254,8 @@ function renderModulo3StoreCoverageTable(targetShifts) {
   }
 
   tbody.innerHTML = filteredStats.map(st => {
-    const covColor = st.coveragePct >= 95 ? '#10b981' : (st.coveragePct >= 85 ? '#f59e0b' : '#ef4444');
-    const missColor = st.missing === 0 ? '#10b981' : (st.missing <= 2 ? '#f59e0b' : '#ef4444');
-    const repColor = st.replacementsPct <= 10 ? '#10b981' : (st.replacementsPct <= 25 ? '#f59e0b' : '#ef4444');
+    const covBadgeClass = st.coveragePct >= 95 ? 'badge-emerald' : (st.coveragePct >= 85 ? 'badge-amber' : 'badge-rose');
+    const covSquareColor = st.coveragePct >= 95 ? '#10b981' : (st.coveragePct >= 85 ? '#f59e0b' : '#ef4444');
     const rowAlert = st.missing > 0 ? 'background: rgba(239, 68, 68, 0.04);' : '';
 
     return `
@@ -4264,33 +4263,52 @@ function renderModulo3StoreCoverageTable(targetShifts) {
         <td><strong>${escapeHtml(st.store)}</strong></td>
         <td><span class="pill pill-neutral">${escapeHtml(st.city)}</span></td>
         <td style="text-align:center;"><strong>${st.requested}</strong></td>
-        <td style="text-align:center;color:var(--text-muted);">${st.confirmed}</td>
-        <td style="text-align:center;color:#6ee7b7;font-weight:700;">${st.covered}</td>
+        <td style="text-align:center;color:var(--text-muted);font-weight:600;">${st.confirmed}</td>
+
+        <!-- Cubiertos (Valor Absoluto) -->
         <td style="text-align:center;">
-          <span class="pill ${st.missing > 0 ? 'pill-bad' : 'pill-neutral'}" style="font-weight:700;">
-            ${st.missing > 0 ? ('🚨 ' + st.missing) : '0'}
+          <span class="table-pct-badge badge-emerald" title="Turnos Cubiertos / Asistidos: ${st.covered} de ${st.requested}">
+            <span class="table-legend-square" style="background:#10b981;"></span>
+            ${st.covered}
           </span>
         </td>
+
+        <!-- Faltantes (Valor Absoluto) -->
         <td style="text-align:center;">
-          <span class="pill ${st.replacements > 0 ? 'pill-warn' : 'pill-neutral'}">
+          <span class="table-pct-badge ${st.missing > 0 ? 'badge-rose' : 'badge-muted'}" title="Cupos Faltantes (Cancela sin Reemplazo / Vacantes): ${st.missing}">
+            <span class="table-legend-square" style="background:${st.missing > 0 ? '#ef4444' : '#64748b'};"></span>
+            ${st.missing}
+          </span>
+        </td>
+
+        <!-- Reemplazos (Valor Absoluto) -->
+        <td style="text-align:center;">
+          <span class="table-pct-badge ${st.replacements > 0 ? 'badge-cyan' : 'badge-muted'}" title="Reemplazos Efectivos: ${st.replacements}">
+            <span class="table-legend-square" style="background:${st.replacements > 0 ? '#06b6d4' : '#64748b'};"></span>
             ${st.replacements}
           </span>
         </td>
-        <td>
-          <div class="table-cell-progress">
-            <div class="table-cell-bar-bg">
-              <div class="table-cell-bar-fill" style="width: ${Math.min(100, st.coveragePct)}%; background: ${covColor};"></div>
-            </div>
-            <strong style="font-size:0.75rem; color:${covColor}; min-width:42px; text-align:right;">${st.coveragePct}%</strong>
-          </div>
-        </td>
+
+        <!-- % Cobertura -->
         <td style="text-align:center;">
-          <span style="font-size:0.78rem; font-weight:700; color:${missColor};">
+          <span class="table-pct-badge ${covBadgeClass}" title="Efectividad de Cobertura: ${st.coveragePct}% (${st.covered} de ${st.requested} requeridos)">
+            <span class="table-legend-square" style="background:${covSquareColor};"></span>
+            ${st.coveragePct}%
+          </span>
+        </td>
+
+        <!-- % Faltantes -->
+        <td style="text-align:center;">
+          <span class="table-pct-badge ${st.missing > 0 ? 'badge-rose' : 'badge-muted'}" title="Tasa de Faltantes: ${st.missingPct}% (${st.missing} de ${st.requested} requeridos)">
+            <span class="table-legend-square" style="background:${st.missing > 0 ? '#ef4444' : '#64748b'};"></span>
             ${st.missingPct}%
           </span>
         </td>
+
+        <!-- % Reemplazos -->
         <td style="text-align:center;">
-          <span class="pill" style="background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); font-size:0.78rem; font-weight:700; color:${repColor};">
+          <span class="table-pct-badge ${st.replacements > 0 ? 'badge-cyan' : 'badge-muted'}" title="Tasa de Reemplazos: ${st.replacementsPct}% (${st.replacements} de ${st.covered} cubiertos)">
+            <span class="table-legend-square" style="background:${st.replacements > 0 ? '#06b6d4' : '#64748b'};"></span>
             ${st.replacementsPct}%
           </span>
         </td>
