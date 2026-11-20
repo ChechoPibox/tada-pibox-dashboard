@@ -1126,6 +1126,9 @@ function setupEventListeners() {
   document.getElementById('profileSearchInput')?.addEventListener('input', (e) => {
     handlePilotSearchTypeahead(e.target.value);
   });
+
+  // Listeners del Centro de Inteligencia Operativa (Fase 2)
+  setupIntelligenceEventListeners();
 }
 
 /**
@@ -1279,6 +1282,11 @@ function switchTab(tabId) {
   // Si entra a la Ficha de Piloto y no hay seleccionado, tomar el primero
   if (tabId === 'pilotos' && !AppState.selectedPilot && AppState.pilotsList.length > 0) {
     selectPilotForProfile(AppState.pilotsList[0].pilot);
+  }
+
+  // Si entra al Centro de Inteligencia Operativa (Fase 2), renderizar diagnósticos
+  if (tabId === 'inteligencia') {
+    renderIntelligenceCenter();
   }
 }
 
@@ -1539,9 +1547,15 @@ function applyFilters() {
   if (AppState.activeTab === 'metricas') {
     renderModulo3Visuals();
   }
+  if (AppState.activeTab === 'inteligencia') {
+    renderIntelligenceCenter();
+  }
   if (AppState.selectedPilot) {
     selectPilotForProfile(AppState.selectedPilot.pilot);
   }
+
+  // Actualizar badge de inteligencia en segundo plano
+  updateIntelligenceBadge();
 }
 
 function resetFilters() {
@@ -5027,3 +5041,288 @@ function renderCityStoreOperationalAnalysis(shifts, selectedCity = '') {
     </div>
   `;
 }
+
+// ============================================================
+// INTEGRACIÓN DEL CENTRO DE INTELIGENCIA OPERATIVA (FASE 2)
+// ============================================================
+
+function updateIntelligenceBadge() {
+  const badge = document.getElementById('tabBadgeIntelligence');
+  if (!badge) return;
+
+  if (typeof OperationalRulesEngine !== 'undefined') {
+    const rulesEval = OperationalRulesEngine.evaluateOperationalContext(AppState.filteredMalla || []);
+    const critCount = rulesEval.criticalCount || 0;
+    if (critCount > 0) {
+      badge.textContent = `${critCount} Críticas`;
+      badge.className = 'tab-badge tab-badge-alert';
+    } else {
+      badge.textContent = 'IA & Reglas';
+      badge.className = 'tab-badge';
+    }
+  }
+}
+
+function renderIntelligenceCenter() {
+  const filtered = AppState.filteredMalla || [];
+  const kpis = typeof calculateModulo1Kpis === 'function' ? calculateModulo1Kpis(filtered) : null;
+
+  if (typeof OperationalRulesEngine === 'undefined' || typeof OperationalAIAnalyst === 'undefined') {
+    console.warn('Motores de Inteligencia Operativa no disponibles en el entorno');
+    return;
+  }
+
+  // 1. Evaluación determinística de reglas
+  const rulesEval = OperationalRulesEngine.evaluateOperationalContext(filtered);
+
+  // 2. Generar resumen ejecutivo
+  const execSummary = OperationalAIAnalyst.generateExecutiveSummary(filtered, kpis, rulesEval);
+
+  // 3. Pintar Hero y Salud Operativa
+  const healthBadge = document.getElementById('intelHealthBadge');
+  const summaryEl = document.getElementById('intelSummaryText');
+  const scoreEl = document.getElementById('intelHealthScore');
+  const compCov = document.getElementById('scoreCompCoverage');
+  const barCov = document.getElementById('barCompCoverage');
+  const compCan = document.getElementById('scoreCompCancels');
+  const barCan = document.getElementById('barCompCancels');
+  const compPrd = document.getElementById('scoreCompProd');
+  const barPrd = document.getElementById('barCompProd');
+
+  if (healthBadge) {
+    healthBadge.textContent = execSummary.statusLabel;
+    healthBadge.style.background = execSummary.statusColor + '20';
+    healthBadge.style.color = execSummary.statusColor;
+    healthBadge.style.borderColor = execSummary.statusColor + '40';
+  }
+
+  if (summaryEl) {
+    summaryEl.innerHTML = execSummary.summaryText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  }
+
+  if (scoreEl) {
+    scoreEl.textContent = `${execSummary.healthScore}/100`;
+    scoreEl.style.color = execSummary.statusColor;
+  }
+
+  if (compCov && barCov) {
+    const v = execSummary.healthComponents?.cobertura || 0;
+    compCov.textContent = `${v}%`;
+    barCov.style.width = `${v}%`;
+  }
+  if (compCan && barCan) {
+    const v = execSummary.healthComponents?.cancelaciones || 0;
+    compCan.textContent = `${v}%`;
+    barCan.style.width = `${v}%`;
+  }
+  if (compPrd && barPrd) {
+    const v = execSummary.healthComponents?.productividad || 0;
+    compPrd.textContent = `${v}%`;
+    barPrd.style.width = `${v}%`;
+  }
+
+  // 4. Renderizar Alertas del Motor de Reglas
+  const alertsContainer = document.getElementById('intelAlertsContainer');
+  const countBadge = document.getElementById('alertsCountBadge');
+
+  if (countBadge) {
+    countBadge.textContent = `${rulesEval.alertsCount} Alertas`;
+    countBadge.style.background = rulesEval.criticalCount > 0 ? '#ef4444' : '#10b981';
+  }
+
+  if (alertsContainer) {
+    if (!rulesEval.alerts || rulesEval.alerts.length === 0) {
+      alertsContainer.innerHTML = `
+        <div style="text-align: center; padding: 28px 16px; color: var(--text-muted); font-size: 0.85rem;">
+          ✅ No se detectan anomalías operativas bajo los filtros seleccionados. Todas las condiciones cumplen las reglas.
+        </div>
+      `;
+    } else {
+      const priorityColors = {
+        'CRITICO': { bg: 'rgba(239, 68, 68, 0.12)', border: '#ef4444', text: '#fca5a5' },
+        'ALTO': { bg: 'rgba(245, 158, 11, 0.12)', border: '#f59e0b', text: '#fcd34d' },
+        'POSITIVO': { bg: 'rgba(16, 185, 129, 0.12)', border: '#10b981', text: '#6ee7b7' },
+        'PREVENTIVO': { bg: 'rgba(59, 130, 246, 0.12)', border: '#3b82f6', text: '#93c5fd' }
+      };
+
+      alertsContainer.innerHTML = rulesEval.alerts.map(a => {
+        const col = priorityColors[a.priority] || priorityColors['PREVENTIVO'];
+        return `
+          <div style="background: ${col.bg}; border-left: 3px solid ${col.border}; border-radius: 6px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
+              <span style="font-weight: 700; font-size: 0.84rem; color: #fff;">
+                ${a.priority === 'CRITICO' ? '🚨' : (a.priority === 'POSITIVO' ? '⭐' : '⚠️')} ${escapeHtml(a.ruleName)} — ${escapeHtml(a.entityName)}
+              </span>
+              <span style="font-size: 0.68rem; font-weight: 800; padding: 2px 6px; border-radius: 4px; background: ${col.border}; color: #fff; text-transform: uppercase;">
+                ${a.priority}
+              </span>
+            </div>
+            <div style="font-size: 0.78rem; color: #cbd5e1; line-height: 1.4;">
+              <strong>Evidencia:</strong> ${escapeHtml(a.evidence)}
+            </div>
+            <div style="font-size: 0.76rem; color: #a78bfa; line-height: 1.4; display: flex; justify-content: space-between; align-items: center; margin-top: 4px;">
+              <span>💡 <strong>Acción:</strong> ${escapeHtml(a.recommendation)}</span>
+              <button class="btn btn-secondary" onclick="handleCreateDecisionFromAlert('${a.id}')" style="font-size: 0.7rem; padding: 2px 8px; flex-shrink: 0; margin-left: 8px;">
+                + Registrar Acción
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+  }
+
+  // 5. Renderizar Decisiones Operativas
+  renderDecisionsTable();
+}
+
+function renderDecisionsTable() {
+  const tbody = document.getElementById('intelDecisionsTbody');
+  if (!tbody || typeof OperationalAIAnalyst === 'undefined') return;
+
+  const decisions = OperationalAIAnalyst.getSavedDecisions();
+  if (decisions.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="5" style="text-align: center; padding: 20px; color: var(--text-muted); font-size: 0.8rem;">
+          ℹ️ No hay decisiones registradas aún. Haz clic en <strong>"+ Registrar Acción"</strong> en cualquier alerta para iniciar el seguimiento.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  const statusBadges = {
+    'Pendiente': 'pill-neutral',
+    'En gestión': 'pill-average',
+    'Implementada': 'pill-productive',
+    'Resuelta': 'pill-super-productive'
+  };
+
+  tbody.innerHTML = decisions.map(d => `
+    <tr>
+      <td style="font-weight: 600; color: #fff;">${escapeHtml(d.action)}</td>
+      <td style="color: #94a3b8;">${escapeHtml(d.entityName || 'General')}</td>
+      <td style="text-align: center; color: #cbd5e1;">${escapeHtml(d.assignee || 'Coordinación')}</td>
+      <td style="text-align: center;">
+        <span class="pill ${statusBadges[d.status] || 'pill-neutral'}" style="font-size: 0.7rem; padding: 2px 8px;">
+          ${escapeHtml(d.status)}
+        </span>
+      </td>
+      <td style="text-align: center;">
+        <select onchange="handleUpdateDecisionStatus('${d.id}', this.value)" style="background: rgba(15,23,42,0.8); color:#fff; border:1px solid rgba(255,255,255,0.15); border-radius:4px; font-size:0.72rem; padding:2px 4px;">
+          <option value="Pendiente" ${d.status === 'Pendiente' ? 'selected' : ''}>Pendiente</option>
+          <option value="En gestión" ${d.status === 'En gestión' ? 'selected' : ''}>En gestión</option>
+          <option value="Implementada" ${d.status === 'Implementada' ? 'selected' : ''}>Implementada</option>
+          <option value="Resuelta" ${d.status === 'Resuelta' ? 'selected' : ''}>Resuelta</option>
+        </select>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function handleCreateDecisionFromAlert(alertId) {
+  if (typeof OperationalRulesEngine === 'undefined' || typeof OperationalAIAnalyst === 'undefined') return;
+  const filtered = AppState.filteredMalla || [];
+  const rulesEval = OperationalRulesEngine.evaluateOperationalContext(filtered);
+  const targetAlert = rulesEval.alerts.find(a => a.id === alertId);
+
+  if (!targetAlert) {
+    alert('Alerta no encontrada en el contexto actual.');
+    return;
+  }
+
+  const actionText = prompt(`Registrar acción de seguimiento para ${targetAlert.entityName}:`, targetAlert.recommendation);
+  if (!actionText) return;
+
+  const assignee = prompt('Asignar responsable de la acción (Ej: Coordinador Bogotá, Supervisor Tienda):', 'Coordinador Operativo');
+
+  OperationalAIAnalyst.saveDecision({
+    alertId: targetAlert.id,
+    action: actionText,
+    entityName: targetAlert.entityName,
+    city: targetAlert.city,
+    assignee: assignee || 'Coordinación'
+  });
+
+  renderDecisionsTable();
+}
+
+function handleUpdateDecisionStatus(decisionId, newStatus) {
+  if (typeof OperationalAIAnalyst === 'undefined') return;
+  OperationalAIAnalyst.updateDecisionStatus(decisionId, newStatus);
+  renderDecisionsTable();
+}
+
+function setupIntelligenceEventListeners() {
+  // Input y Botón de Consulta IA
+  const inputEl = document.getElementById('intelChatInput');
+  const sendBtn = document.getElementById('btnIntelSendChat');
+  const clearBtn = document.getElementById('btnIntelClearChat');
+  const chatHist = document.getElementById('intelChatHistory');
+
+  function submitChatQuery(q) {
+    const query = q || (inputEl?.value || '').trim();
+    if (!query) return;
+
+    if (inputEl) inputEl.value = '';
+
+    // Append mensaje del usuario
+    if (chatHist) {
+      chatHist.innerHTML += `
+        <div style="background: rgba(139, 92, 246, 0.15); border: 1px solid rgba(139, 92, 246, 0.3); padding: 10px 14px; border-radius: 8px; font-size: 0.83rem; color: #fff; align-self: flex-end; max-width: 85%;">
+          🧑‍💼 ${escapeHtml(query)}
+        </div>
+      `;
+      chatHist.scrollTop = chatHist.scrollHeight;
+    }
+
+    // Procesar con OperationalAIAnalyst
+    setTimeout(() => {
+      if (typeof OperationalAIAnalyst === 'undefined' || typeof OperationalRulesEngine === 'undefined') return;
+      const filtered = AppState.filteredMalla || [];
+      const kpis = typeof calculateModulo1Kpis === 'function' ? calculateModulo1Kpis(filtered) : null;
+      const rulesEval = OperationalRulesEngine.evaluateOperationalContext(filtered);
+
+      const response = OperationalAIAnalyst.answerQuery(query, filtered, kpis, rulesEval);
+
+      if (chatHist) {
+        const formattedAnswer = response.answer
+          .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+          .replace(/\n/g, '<br/>');
+
+        chatHist.innerHTML += `
+          <div style="background: rgba(30, 41, 59, 0.7); border-left: 3px solid #8b5cf6; padding: 12px 14px; border-radius: 8px; font-size: 0.84rem; line-height: 1.5; color: #e2e8f0; align-self: flex-start; max-width: 90%;">
+            ${formattedAnswer}
+          </div>
+        `;
+        chatHist.scrollTop = chatHist.scrollHeight;
+      }
+    }, 120);
+  }
+
+  sendBtn?.addEventListener('click', () => submitChatQuery());
+  inputEl?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') submitChatQuery();
+  });
+
+  // Botones de preguntas predefinidas
+  document.querySelectorAll('.intel-prompt-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const q = btn.getAttribute('data-query');
+      submitChatQuery(q);
+    });
+  });
+
+  // Limpiar chat
+  clearBtn?.addEventListener('click', () => {
+    if (chatHist) {
+      chatHist.innerHTML = `
+        <div style="background: rgba(30, 41, 59, 0.7); padding: 12px 16px; border-radius: 8px; border-left: 3px solid #8b5cf6; font-size: 0.85rem; line-height: 1.5; color: #e2e8f0;">
+          👋 <strong>¡Hola! Soy tu Analista Operativo IA.</strong> El historial fue limpiado. Puedes consultar cualquier duda operativa bajo los filtros activos.
+        </div>
+      `;
+    }
+  });
+}
+

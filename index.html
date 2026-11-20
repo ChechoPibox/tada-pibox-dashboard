@@ -138,6 +138,9 @@
         <button class="nav-tab" data-tab="pilotos">
           <span>👤</span> Ficha de Piloto <span class="tab-badge">360°</span>
         </button>
+        <button class="nav-tab" data-tab="inteligencia">
+          <span>🧠</span> Inteligencia Operativa <span class="tab-badge tab-badge-alert" id="tabBadgeIntelligence">IA & Reglas</span>
+        </button>
       </div>
     </nav>
   </div>
@@ -1148,6 +1151,167 @@
       </section>
     </div>
 
+    <!-- ========================================== -->
+    <!-- TAB: CENTRO DE INTELIGENCIA OPERATIVA (FASE 2) -->
+    <!-- ========================================== -->
+    <div id="tab-inteligencia" class="tab-content" style="display: none;">
+      <!-- Hero Resumen Inteligente -->
+      <section class="card" style="margin-bottom: 24px; border-left: 4px solid #8b5cf6; background: linear-gradient(135deg, rgba(139, 92, 246, 0.08) 0%, rgba(20, 20, 35, 0.6) 100%);">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px;">
+          <div>
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+              <span style="font-size: 1.5rem;">🧠</span>
+              <h2 style="font-size: 1.25rem; font-weight: 700; margin: 0; color: #fff;">Centro de Inteligencia Operativa Pibox TaDa</h2>
+              <span class="pill pill-productive" id="intelHealthBadge">Saludable</span>
+            </div>
+            <p id="intelSummaryText" style="font-size: 0.95rem; color: #cbd5e1; max-width: 900px; line-height: 1.6; margin: 0;">
+              Analizando contexto operativo en tiempo real...
+            </p>
+          </div>
+          <!-- Gauge / Health Score -->
+          <div style="background: rgba(15, 23, 42, 0.6); padding: 14px 22px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.1); text-align: center; min-width: 140px;">
+            <div style="font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8; font-weight: 600;">Índice de Salud</div>
+            <div id="intelHealthScore" style="font-size: 2.2rem; font-weight: 800; color: #10b981; line-height: 1.1; margin: 4px 0;">--/100</div>
+            <div id="intelHealthSub" style="font-size: 0.75rem; color: #64748b;">40% Cob · 30% Can · 30% Prod</div>
+          </div>
+        </div>
+
+        <!-- Componentes de Salud -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-top: 18px;">
+          <div style="background: rgba(30, 41, 59, 0.5); padding: 10px 14px; border-radius: 8px;">
+            <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 4px;">
+              <span style="color: #94a3b8;">Cobertura de Cupos</span>
+              <span id="scoreCompCoverage" style="font-weight: 700; color: #fff;">--%</span>
+            </div>
+            <div style="height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden;">
+              <div id="barCompCoverage" style="height: 100%; width: 0%; background: #10b981; transition: width 0.4s ease;"></div>
+            </div>
+          </div>
+          <div style="background: rgba(30, 41, 59, 0.5); padding: 10px 14px; border-radius: 8px;">
+            <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 4px;">
+              <span style="color: #94a3b8;">Tasa de No-Cancelación</span>
+              <span id="scoreCompCancels" style="font-weight: 700; color: #fff;">--%</span>
+            </div>
+            <div style="height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden;">
+              <div id="barCompCancels" style="height: 100%; width: 0%; background: #3b82f6; transition: width 0.4s ease;"></div>
+            </div>
+          </div>
+          <div style="background: rgba(30, 41, 59, 0.5); padding: 10px 14px; border-radius: 8px;">
+            <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 4px;">
+              <span style="color: #94a3b8;">Nivel de Productividad</span>
+              <span id="scoreCompProd" style="font-weight: 700; color: #fff;">--%</span>
+            </div>
+            <div style="height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden;">
+              <div id="barCompProd" style="height: 100%; width: 0%; background: #8b5cf6; transition: width 0.4s ease;"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Layout 2 Columnas: Alertas del Motor de Reglas (Izq) y Analista IA Conversacional (Der) -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); gap: 24px; align-items: start;">
+        
+        <!-- Columna 1: Centro de Alertas Determinísticas y Decisiones -->
+        <div>
+          <div class="card" style="margin-bottom: 24px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+              <div>
+                <h3 style="font-size: 1.1rem; font-weight: 700; margin: 0; display: flex; align-items: center; gap: 8px;">
+                  <span>🚨</span> Alertas Operativas Automáticas
+                </h3>
+                <span style="font-size: 0.8rem; color: var(--text-muted);">Generadas por motor de reglas determinístico sin duplicidad</span>
+              </div>
+              <span class="badge" id="alertsCountBadge" style="background: #ef4444; color: #fff; font-size: 0.75rem; padding: 4px 10px; border-radius: 999px;">0 Alertas</span>
+            </div>
+
+            <!-- Contenedor dinámico de alertas -->
+            <div id="intelAlertsContainer" style="display: flex; flex-direction: column; gap: 12px; max-height: 520px; overflow-y: auto; padding-right: 4px;">
+              <!-- Tarjetas de alertas generadas dinámicamente -->
+            </div>
+          </div>
+
+          <!-- Componente de Historial de Decisiones Operativas -->
+          <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+              <div>
+                <h3 style="font-size: 1.05rem; font-weight: 700; margin: 0; display: flex; align-items: center; gap: 8px;">
+                  <span>📋</span> Seguimiento de Decisiones y Acciones
+                </h3>
+                <span style="font-size: 0.78rem; color: var(--text-muted);">Trazabilidad de recomendaciones ejecutadas por coordinación</span>
+              </div>
+            </div>
+            
+            <div id="intelDecisionsTableContainer" style="overflow-x: auto;">
+              <table class="table-compact" style="width: 100%; font-size: 0.82rem;">
+                <thead>
+                  <tr>
+                    <th style="text-align: left;">Acción / Decisión</th>
+                    <th style="text-align: left;">Entidad</th>
+                    <th style="text-align: center;">Responsable</th>
+                    <th style="text-align: center;">Estado</th>
+                    <th style="text-align: center;">Acción</th>
+                  </tr>
+                </thead>
+                <tbody id="intelDecisionsTbody">
+                  <!-- Decisiones registradas -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Columna 2: Analista Operativo IA Conversacional -->
+        <div class="card" style="border: 1px solid rgba(139, 92, 246, 0.3); background: rgba(20, 20, 35, 0.7);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 12px;">
+            <div>
+              <h3 style="font-size: 1.1rem; font-weight: 700; margin: 0; display: flex; align-items: center; gap: 8px;">
+                <span>💬</span> Analista Operativo IA Pibox TaDa
+              </h3>
+              <span style="font-size: 0.8rem; color: #a78bfa;">Razonamiento contextual sobre datos validados · Cero alucinaciones</span>
+            </div>
+            <button id="btnIntelClearChat" class="btn btn-secondary" style="font-size: 0.75rem; padding: 4px 10px;">
+              🧹 Limpiar
+            </button>
+          </div>
+
+          <!-- Sugerencias de Preguntas Frecuentes -->
+          <div style="margin-bottom: 14px;">
+            <div style="font-size: 0.75rem; text-transform: uppercase; color: #94a3b8; font-weight: 600; margin-bottom: 6px;">Preguntas Frecuentes:</div>
+            <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+              <button class="intel-prompt-btn pill pill-neutral" data-query="¿Qué tiendas tienen más vacantes o cancelaciones sin reemplazo?" style="cursor: pointer; font-size: 0.75rem; text-align: left;">
+                🏪 ¿Qué tiendas tienen más vacantes?
+              </button>
+              <button class="intel-prompt-btn pill pill-neutral" data-query="¿Qué ciudad presentó el mejor y peor desempeño?" style="cursor: pointer; font-size: 0.75rem; text-align: left;">
+                🏙️ Comparar desempeño de ciudades
+              </button>
+              <button class="intel-prompt-btn pill pill-neutral" data-query="¿Qué pilotos presentan mayores cancelaciones o alertas de asistencia?" style="cursor: pointer; font-size: 0.75rem; text-align: left;">
+                🛵 Pilotos con alertas de asistencia
+              </button>
+              <button class="intel-prompt-btn pill pill-neutral" data-query="Dame un resumen de los principales riesgos y recomendaciones de esta semana" style="cursor: pointer; font-size: 0.75rem; text-align: left;">
+                ⚡ Diagnóstico integral de riesgos
+              </button>
+            </div>
+          </div>
+
+          <!-- Historial de Chat -->
+          <div id="intelChatHistory" style="height: 380px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 12px; background: rgba(15, 23, 42, 0.6); border-radius: 8px; border: 1px solid rgba(255,255,255,0.05); margin-bottom: 12px;">
+            <div style="background: rgba(30, 41, 59, 0.7); padding: 12px 16px; border-radius: 8px; border-left: 3px solid #8b5cf6; font-size: 0.85rem; line-height: 1.5; color: #e2e8f0;">
+              👋 <strong>¡Hola! Soy tu Analista Operativo IA.</strong> Estoy conectado directamente a las métricas validadas de TaDa / Pibox. Pregúntame sobre cobertura, vacantes por tienda, cancelaciones, productividad o pilotos bajo los filtros actuales.
+            </div>
+          </div>
+
+          <!-- Input de Consulta -->
+          <div style="display: flex; gap: 8px;">
+            <input type="text" id="intelChatInput" class="filter-input" placeholder="Pregunta sobre tiendas, vacantes, productividad, pilotos..." style="flex: 1; height: 42px; font-size: 0.85rem;" />
+            <button id="btnIntelSendChat" class="btn btn-primary" style="height: 42px; padding: 0 18px; font-size: 0.85rem; display: flex; align-items: center; gap: 6px;">
+              <span>Consultar</span> ➔
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
   </main>
 
   <!-- MODAL: POOL DE SUPLENTES (3 CRITERIOS OFICIALES) -->
@@ -1488,8 +1652,10 @@
   <!-- Módulos de la Aplicación -->
   <script src="./js/config.js?v=20261120_v106"></script>
   <script src="./js/productivity-matrix.js?v=20261120_v106"></script>
-  <script src="./js/rules.js?v=20261120_v106"></script>
-  <script src="./js/storage-db.js?v=20261120_v106"></script>
+  <script src="./js/rules.js?v=20261120_v107"></script>
+  <script src="./js/operational-rules-engine.js?v=20261120_v107"></script>
+  <script src="./js/operational-ai-analyst.js?v=20261120_v107"></script>
+  <script src="./js/storage-db.js?v=20261120_v107"></script>
   <script src="./js/sheets-service.js?v=20261120_v106"></script>
   <script src="./js/coverage-engine.js?v=20261120_v106"></script>
   <script src="./js/charts.js?v=20261120_v106"></script>
