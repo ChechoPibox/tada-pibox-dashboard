@@ -332,17 +332,21 @@ const ChartManager = {
       if (!storeMap[storeName]) {
         storeMap[storeName] = {
           store: storeName,
+          confirmed: 0,
           covered: 0,
           replacements: 0,
           missing: 0,
+          cancels: 0,
           required: 0
         };
       }
       const matched = Math.min(g.cancels, g.reemplazos);
       const unmatched = Math.max(0, g.cancels - g.reemplazos);
+      storeMap[storeName].confirmed += g.activeConfirmed;
       storeMap[storeName].covered += g.activeConfirmed + g.reemplazos;
       storeMap[storeName].missing += unmatched + (g.noProgramado || 0) + (g.sinPiloto || 0);
       storeMap[storeName].replacements += g.reemplazos;
+      storeMap[storeName].cancels += g.cancels;
     });
 
     const allStores = Object.values(storeMap)
@@ -351,8 +355,11 @@ const ChartManager = {
       .slice(0, 12);
 
     const storeLabels = allStores.map(s => s.store.split('-')[1] || s.store.substring(0, 14));
-    const coveredData = allStores.map(s => s.covered);
+    const attendedData = allStores.map(s => s.confirmed);
+    const replacementsData = allStores.map(s => s.replacements);
     const missingData = allStores.map(s => s.missing);
+    const cancelsData = allStores.map(s => s.cancels);
+    const coveredData = allStores.map(s => s.covered);
 
     this.instances[canvasId] = new Chart(ctx, {
       type: 'bar',
@@ -360,14 +367,21 @@ const ChartManager = {
         labels: storeLabels,
         datasets: [
           {
-            label: 'Turnos Cubiertos',
-            data: coveredData,
+            label: 'Turnos Asistidos',
+            data: attendedData,
             backgroundColor: this.colors.emerald,
             borderRadius: 4,
             stack: 'stack'
           },
           {
-            label: 'Faltantes / Sin Cubrir',
+            label: 'Reemplazos',
+            data: replacementsData,
+            backgroundColor: this.colors.cyan,
+            borderRadius: 4,
+            stack: 'stack'
+          },
+          {
+            label: 'Faltantes (Cancela sin Reemplazo)',
             data: missingData,
             backgroundColor: this.colors.rose,
             borderRadius: 4,
@@ -379,15 +393,23 @@ const ChartManager = {
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
-          legend: { labels: { color: this.colors.textMuted, boxWidth: 12 } },
+          legend: { labels: { color: this.colors.textMuted, boxWidth: 12, font: { size: 11 } } },
           tooltip: {
+            mode: 'index',
+            intersect: false,
             callbacks: {
               title: (items) => allStores[items[0].dataIndex]?.store || '',
-              label: (item) => {
-                const idx = item.dataIndex;
-                const tot = (coveredData[idx] || 0) + (missingData[idx] || 0);
-                const pct = tot > 0 ? ((item.raw / tot) * 100).toFixed(1) : 0;
-                return ` ${item.dataset.label}: ${item.raw} turnos (${pct}%)`;
+              afterBody: (items) => {
+                const idx = items[0]?.dataIndex;
+                const totalCancels = cancelsData[idx] || 0;
+                const totalReq = (coveredData[idx] || 0) + (missingData[idx] || 0);
+                const lines = [];
+                if (totalCancels > 0) lines.push(`── Cancelaciones totales: ${totalCancels}`);
+                if (totalReq > 0) {
+                  const covPct = ((coveredData[idx] || 0) / totalReq * 100).toFixed(0);
+                  lines.push(`── Asistencia: ${covPct}% de la tienda`);
+                }
+                return lines;
               }
             }
           },

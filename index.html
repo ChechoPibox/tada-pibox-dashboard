@@ -10,7 +10,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   
-  <link rel="stylesheet" href="./css/styles.css?v=20261120_v103">
+  <link rel="stylesheet" href="./css/styles.css?v=20261120_v104">
   <link rel="icon" href="./assets/logo_pibox_tada.jpg" type="image/jpeg">
 </head>
 <body>
@@ -767,12 +767,17 @@
 
       <!-- BLOQUE 1.2: TABLA DETALLADA DE COBERTURA Y FALTANTES POR PUNTO (Req 2) -->
       <section class="section-panel" style="margin-bottom: 20px;">
-        <div class="panel-header" style="flex-wrap: wrap; gap: 10px;">
+        <div class="panel-header" style="flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;">
           <div>
             <div class="panel-title" style="font-size: 1rem;">🏪 Cobertura, Faltantes y Dependencia de Reemplazos por Punto</div>
             <div class="panel-subtitle" style="font-size: 0.78rem;">Balance de turnos solicitados, confirmados, cubiertos, faltantes y tasa de reemplazos</div>
           </div>
-          <div style="display:flex; align-items:center; gap:8px;">
+          <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+            <div style="display:inline-flex; align-items:center; gap:12px; font-size:0.75rem; color:var(--text-muted); background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.07); padding:4px 10px; border-radius:8px;">
+              <span style="display:inline-flex; align-items:center; gap:5px;"><span class="table-legend-square" style="background:#10b981;"></span> <span style="color:#fff; font-weight:600;">Turnos Asistidos</span></span>
+              <span style="display:inline-flex; align-items:center; gap:5px;"><span class="table-legend-square" style="background:#06b6d4;"></span> <span style="color:#fff; font-weight:600;">Reemplazos</span></span>
+              <span style="display:inline-flex; align-items:center; gap:5px;"><span class="table-legend-square" style="background:#ef4444;"></span> <span style="color:#fff; font-weight:600;">Faltantes (Cancela sin Reemplazo)</span></span>
+            </div>
             <input type="text" id="inputFilterCoverageStoreTable" class="filter-input" placeholder="🔍 Filtrar tienda..." style="font-size: 0.78rem; padding: 4px 10px; height: 32px; width: 180px;">
           </div>
         </div>
@@ -1418,16 +1423,16 @@
   <script src="./js/vendor/chart.umd.min.js"></script>
 
   <!-- Módulos de la Aplicación -->
-  <script src="./js/config.js?v=20261120_v103"></script>
-  <script src="./js/productivity-matrix.js?v=20261120_v103"></script>
-  <script src="./js/rules.js?v=20261120_v103"></script>
-  <script src="./js/storage-db.js?v=20261120_v103"></script>
-  <script src="./js/sheets-service.js?v=20261120_v103"></script>
-  <script src="./js/coverage-engine.js?v=20261120_v103"></script>
-  <script src="./js/charts.js?v=20261120_v103"></script>
-  <script src="./js/data.js?v=20261120_v103"></script>
-  <script src="./js/llamados-service.js?v=20261120_v103"></script>
-  <script src="./js/app.js?v=20261120_v103"></script>
+  <script src="./js/config.js?v=20261120_v104"></script>
+  <script src="./js/productivity-matrix.js?v=20261120_v104"></script>
+  <script src="./js/rules.js?v=20261120_v104"></script>
+  <script src="./js/storage-db.js?v=20261120_v104"></script>
+  <script src="./js/sheets-service.js?v=20261120_v104"></script>
+  <script src="./js/coverage-engine.js?v=20261120_v104"></script>
+  <script src="./js/charts.js?v=20261120_v104"></script>
+  <script src="./js/data.js?v=20261120_v104"></script>
+  <script src="./js/llamados-service.js?v=20261120_v104"></script>
+  <script src="./js/app.js?v=20261120_v104"></script>
 </body>
 </html>
 
