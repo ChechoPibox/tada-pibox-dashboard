@@ -63,12 +63,16 @@ const OperationalAIAnalyst = {
     }
 
     // Índice de Salud Operativa Transparente (0 - 100)
-    // 40% Cobertura de Cupos (target 95% = 100 pts)
-    // 30% Tasa de No-Cancelación (100 - cancelRate)
-    // 30% Productividad (target 1.20 paq/h = 100 pts)
-    const covScore = Math.min(100, Math.max(0, (kpis.coberturaAsistenciaPct / 95) * 100));
-    const cancelScore = Math.max(0, 100 - (kpis.tasaCancelacionPct * 2.5));
-    const prodScore = Math.min(100, Math.max(0, (kpis.productividadReal / 1.20) * 100));
+    // 40% Cobertura de Cupos (target 95% = 100 pts)  → kpis.cuposCoveragePct
+    // 30% Tasa de No-Cancelación (100 - cancelRate)  → kpis.cancellationRatePct
+    // 30% Productividad (target 1.20 paq/h = 100 pts) → kpis.fleetProductivityPaqH
+    const covPct    = typeof kpis.cuposCoveragePct === 'number'       ? kpis.cuposCoveragePct       : (kpis.coberturaAsistenciaPct || 0);
+    const cancelPct = typeof kpis.cancellationRatePct === 'number'    ? kpis.cancellationRatePct    : (kpis.tasaCancelacionPct || 0);
+    const prodPqH   = typeof kpis.fleetProductivityPaqH === 'number'  ? kpis.fleetProductivityPaqH  : (kpis.productividadReal || 0);
+
+    const covScore    = Math.min(100, Math.max(0, (covPct / 95) * 100));
+    const cancelScore = Math.max(0, 100 - (cancelPct * 2.5));
+    const prodScore   = Math.min(100, Math.max(0, (prodPqH / 1.20) * 100));
 
     const healthScore = Math.round((covScore * 0.40) + (cancelScore * 0.30) + (prodScore * 0.30));
 
@@ -98,7 +102,12 @@ const OperationalAIAnalyst = {
     stores.sort((a, b) => b.unmatchedCancels - a.unmatchedCancels);
     const topMissingStores = stores.filter(s => s.unmatchedCancels > 0);
 
-    const summaryText = `La operación registra una salud de **${healthScore}/100** (${statusLabel}), alcanzando una cobertura de cupos del **${kpis.coberturaAsistenciaPct.toFixed(1)}%** y una productividad global de **${kpis.productividadReal.toFixed(2)} paq/h** con ${kpis.totalPaquetes.toLocaleString()} paquetes entregados. Se detectaron **${kpis.cuposFaltantesTotal} vacantes totales** (${kpis.cuposFaltantesBreakdown.unmatchedCancels} cancelados sin reemplazo), concentradas principalmente en ${topMissingStores.length > 0 ? topMissingStores.slice(0, 2).map(s => s.store.split(' - ')[0]).join(' y ') : 'ninguna tienda crítica'}.`;
+    // Normalizar nombres de propiedades con fallback para compatibilidad
+    const _covPct  = typeof kpis.cuposCoveragePct === 'number'      ? kpis.cuposCoveragePct      : (kpis.coberturaAsistenciaPct || 0);
+    const _prodPqH = typeof kpis.fleetProductivityPaqH === 'number' ? kpis.fleetProductivityPaqH : (kpis.productividadReal || 0);
+    const _totalPkgs = typeof kpis.totalPackages === 'number'       ? kpis.totalPackages         : (kpis.totalPaquetes || 0);
+
+    const summaryText = `La operación registra una salud de **${healthScore}/100** (${statusLabel}), alcanzando una cobertura de cupos del **${_covPct.toFixed(1)}%** y una productividad global de **${_prodPqH.toFixed(2)} paq/h** con ${_totalPkgs.toLocaleString()} paquetes entregados. Se detectaron **${kpis.cuposFaltantesTotal} vacantes totales** (${kpis.cuposFaltantesBreakdown.unmatchedCancels} cancelados sin reemplazo), concentradas principalmente en ${topMissingStores.length > 0 ? topMissingStores.slice(0, 2).map(s => s.store.split(' - ')[0]).join(' y ') : 'ninguna tienda crítica'}.`;
 
     return {
       healthScore,
@@ -182,13 +191,15 @@ const OperationalAIAnalyst = {
       };
     }
 
-    // 4. Respuesta general con resumen inteligente
+    // Respuesta general con resumen inteligente
+    const _prod  = typeof kpis.fleetProductivityPaqH === 'number' ? kpis.fleetProductivityPaqH : (kpis.productividadReal || 0);
+    const _cov   = typeof kpis.cuposCoveragePct === 'number'      ? kpis.cuposCoveragePct      : (kpis.coberturaAsistenciaPct || 0);
     return {
-      answer: `📊 **Diagnóstico Operativo General:**\n\nBajo los filtros activos, la operación cuenta con **${filteredMalla.length} turnos evaluados**, una productividad promedio de **${kpis.productividadReal.toFixed(2)} paq/h**, cobertura del **${kpis.coberturaAsistenciaPct.toFixed(1)}%** y **${kpis.cuposFaltantesTotal} vacantes totales**. Se han identificado **${rulesEval.alertsCount} alertas operativas activas** (${rulesEval.criticalCount} críticas).\n\nPuedes consultar preguntas específicas sobre tiendas, ciudades, vacantes, productividad o pilotos.`,
+      answer: `📊 **Diagnóstico Operativo General:**\n\nBajo los filtros activos, la operación cuenta con **${filteredMalla.length} turnos evaluados**, una productividad promedio de **${_prod.toFixed(2)} paq/h**, cobertura del **${_cov.toFixed(1)}%** y **${kpis.cuposFaltantesTotal} vacantes totales**. Se han identificado **${rulesEval.alertsCount} alertas operativas activas** (${rulesEval.criticalCount} críticas).\n\nPuedes consultar preguntas específicas sobre tiendas, ciudades, vacantes, productividad o pilotos.`,
       evidence: [
         { item: 'Turnos', value: filteredMalla.length },
-        { item: 'Productividad', value: `${kpis.productividadReal.toFixed(2)} paq/h` },
-        { item: 'Cobertura', value: `${kpis.coberturaAsistenciaPct.toFixed(1)}%` },
+        { item: 'Productividad', value: `${_prod.toFixed(2)} paq/h` },
+        { item: 'Cobertura', value: `${_cov.toFixed(1)}%` },
         { item: 'Vacantes', value: kpis.cuposFaltantesTotal }
       ]
     };

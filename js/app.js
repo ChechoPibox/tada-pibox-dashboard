@@ -4301,6 +4301,7 @@ document.addEventListener('DOMContentLoaded', initApp);
 // ============================================================
 let _autoRefreshTimer = null;
 let _autoRefreshRunning = false;
+let _autoRefreshFailCount = 0; // Fallos consecutivos para backoff exponencial
 
 async function autoRefreshTick() {
   // Guard de concurrencia: si ya hay una sincronización en curso, no lanzar otra
@@ -4353,14 +4354,22 @@ async function autoRefreshTick() {
 
     // Mostrar hora de última actualización exitosa
     const now = new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    // Reset contador de fallos tras exito
+    if (_autoRefreshFailCount >= 3) startAutoRefresh(60000); // restaurar intervalo normal
+    _autoRefreshFailCount = 0;
     updateSyncStatus(`🔄 Auto-actualizado · ${now} (${AppState.mallaShifts.length} turnos)`);
 
   } catch (err) {
-    // Si falla la sincronización automática, conservar los datos actuales en memoria
-    // No mostrar error intrusivo, solo registrar en consola y actualizar el status
-    console.warn('[AutoRefresh] Falló sincronización automática, datos locales conservados:', err.message);
+    // Si falla la sincronizacion, conservar datos locales en memoria sin interrumpir al usuario
+    _autoRefreshFailCount++;
+    console.warn(`[AutoRefresh] Fallo #${_autoRefreshFailCount} · Datos locales conservados:`, err.message);
     const now = new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    updateSyncStatus(`⚠️ Auto-refresh falló a las ${now} · Reintentando en 60s`);
+    if (_autoRefreshFailCount >= 3) {
+      updateSyncStatus(`⚠️ Sin conexión a la fuente · Datos locales activos · Reintentando en 5 min`);
+      startAutoRefresh(300000); // backoff: 5 minutos
+    } else {
+      updateSyncStatus(`⚠️ Sincronización falló (${_autoRefreshFailCount}/3) a las ${now} · Reintentando en 60s`);
+    }
   } finally {
     _autoRefreshRunning = false;
   }
@@ -4398,6 +4407,7 @@ document.addEventListener('visibilitychange', () => {
   } else {
     // Al volver a la pestaña, reiniciar el timer
     startAutoRefresh(60000);
+    _autoRefreshFailCount = 0; // Reset backoff al retomar visibilidad
   }
 });
 
