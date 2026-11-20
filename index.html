@@ -12,7 +12,7 @@
   <meta http-equiv="X-Content-Type-Options" content="nosniff">
   <meta name="referrer" content="strict-origin-when-cross-origin">
   
-  <link rel="stylesheet" href="./css/styles.css?v=20261120_v109">
+  <link rel="stylesheet" href="./css/styles.css?v=20261120_v110">
   <link rel="icon" href="./assets/logo_pibox_tada.jpg" type="image/jpeg">
 </head>
 <body>
@@ -757,12 +757,12 @@
               <table class="compare-table" id="tableMonthVsMonthComparison">
                 <thead>
                   <tr>
-                    <th>Indicador</th>
-                    <th id="thCompareCurrent">Periodo Actual</th>
-                    <th id="thComparePrevious">Periodo Previo</th>
-                    <th>Dif. Absoluta</th>
-                    <th>Variación %</th>
-                    <th>Tendencia</th>
+                    <th style="text-align: left;">Indicador</th>
+                    <th id="thCompareCurrent" style="text-align: center;">Periodo Actual</th>
+                    <th id="thComparePrevious" style="text-align: center;">Periodo Previo</th>
+                    <th style="text-align: center;">Dif. Absoluta</th>
+                    <th style="text-align: center;">Variación %</th>
+                    <th style="text-align: center;">Tendencia</th>
                   </tr>
                 </thead>
                 <tbody id="tbodyMonthVsMonth">
@@ -1156,54 +1156,56 @@
     <!-- ========================================== -->
     <div id="tab-inteligencia" class="tab-content" style="display: none;">
       <!-- Hero Resumen Inteligente -->
-      <section class="card" style="margin-bottom: 24px; border-left: 4px solid #8b5cf6; background: linear-gradient(135deg, rgba(139, 92, 246, 0.08) 0%, rgba(20, 20, 35, 0.6) 100%);">
-        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px;">
-          <div>
-            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
-              <span style="font-size: 1.5rem;">🧠</span>
-              <h2 style="font-size: 1.25rem; font-weight: 700; margin: 0; color: #fff;">Centro de Inteligencia Operativa Pibox TaDa</h2>
-              <span class="pill pill-productive" id="intelHealthBadge">Saludable</span>
+      <section class="card" style="margin-bottom: 24px; border-left: 4px solid #8b5cf6; background: linear-gradient(135deg, rgba(139, 92, 246, 0.08) 0%, rgba(20, 20, 35, 0.8) 100%); padding: 22px 24px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px;">
+          <div style="flex: 1; min-width: 320px;">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+              <span style="font-size: 1.6rem;">🧠</span>
+              <h2 style="font-size: 1.3rem; font-weight: 800; margin: 0; color: #fff; letter-spacing: -0.01em;">Centro de Inteligencia Operativa Pibox TaDa</h2>
+              <span class="pill pill-productive" id="intelHealthBadge" style="font-size: 0.76rem; font-weight: 700;">Saludable</span>
             </div>
-            <p id="intelSummaryText" style="font-size: 0.95rem; color: #cbd5e1; max-width: 900px; line-height: 1.6; margin: 0;">
+            <p id="intelSummaryText" style="font-size: 0.95rem; color: #cbd5e1; max-width: 920px; line-height: 1.65; margin: 0;">
               Analizando contexto operativo en tiempo real...
             </p>
           </div>
-          <!-- Gauge / Health Score -->
-          <div style="background: rgba(15, 23, 42, 0.6); padding: 14px 22px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.1); text-align: center; min-width: 140px;">
-            <div style="font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8; font-weight: 600;">Índice de Salud</div>
-            <div id="intelHealthScore" style="font-size: 2.2rem; font-weight: 800; color: #10b981; line-height: 1.1; margin: 4px 0;">--/100</div>
-            <div id="intelHealthSub" style="font-size: 0.75rem; color: #64748b;">40% Cob · 30% Can · 30% Prod</div>
+          <!-- Gauge / Health Score Centrado y Estructurado -->
+          <div style="background: linear-gradient(145deg, rgba(15, 23, 42, 0.9) 0%, rgba(24, 20, 50, 0.9) 100%); padding: 18px 26px; border-radius: 14px; border: 1px solid rgba(139, 92, 246, 0.3); text-align: center; min-width: 180px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4); display: flex; flex-direction: column; align-items: center; justify-content: center;">
+            <div style="font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: #a78bfa; font-weight: 700; text-align: center;">Índice de Salud</div>
+            <div id="intelHealthScore" style="font-size: 2.7rem; font-weight: 900; color: #10b981; line-height: 1.05; margin: 6px 0; text-align: center; font-variant-numeric: tabular-nums;">--/100</div>
+            <div id="intelHealthSub" style="font-size: 0.72rem; color: #94a3b8; font-weight: 500; text-align: center; white-space: nowrap;">40% Cob · 30% Can · 30% Prod</div>
           </div>
         </div>
 
-        <!-- Componentes de Salud -->
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-top: 18px;">
-          <div style="background: rgba(30, 41, 59, 0.5); padding: 10px 14px; border-radius: 8px;">
-            <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 4px;">
-              <span style="color: #94a3b8;">Cobertura de Cupos</span>
-              <span id="scoreCompCoverage" style="font-weight: 700; color: #fff;">--%</span>
+        <!-- 3 Componentes de Salud: Tarjetas Métricas con Textos y Barras Centradas -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-top: 20px;">
+          <!-- Componente 1: Cobertura -->
+          <div style="background: rgba(14, 18, 48, 0.7); border: 1px solid rgba(139, 92, 246, 0.16); padding: 14px 18px; border-radius: 10px; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;">
+            <span style="font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8; font-weight: 700; text-align: center;">Cobertura de Cupos</span>
+            <div id="scoreCompCoverage" style="font-size: 1.65rem; font-weight: 800; color: #10b981; line-height: 1.1; text-align: center; font-variant-numeric: tabular-nums;">--%</div>
+            <div style="width: 100%; height: 6px; background: rgba(255,255,255,0.08); border-radius: 999px; overflow: hidden; margin: 4px 0;">
+              <div id="barCompCoverage" style="height: 100%; width: 0%; background: #10b981; border-radius: 999px; transition: width 0.5s ease;"></div>
             </div>
-            <div style="height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden;">
-              <div id="barCompCoverage" style="height: 100%; width: 0%; background: #10b981; transition: width 0.4s ease;"></div>
-            </div>
+            <span style="font-size: 0.70rem; color: #64748b; font-weight: 500; text-align: center;">Meta ≥95% · Ponderación 40%</span>
           </div>
-          <div style="background: rgba(30, 41, 59, 0.5); padding: 10px 14px; border-radius: 8px;">
-            <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 4px;">
-              <span style="color: #94a3b8;">Tasa de No-Cancelación</span>
-              <span id="scoreCompCancels" style="font-weight: 700; color: #fff;">--%</span>
+
+          <!-- Componente 2: No-Cancelación -->
+          <div style="background: rgba(14, 18, 48, 0.7); border: 1px solid rgba(139, 92, 246, 0.16); padding: 14px 18px; border-radius: 10px; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;">
+            <span style="font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8; font-weight: 700; text-align: center;">Tasa de No-Cancelación</span>
+            <div id="scoreCompCancels" style="font-size: 1.65rem; font-weight: 800; color: #38bdf8; line-height: 1.1; text-align: center; font-variant-numeric: tabular-nums;">--%</div>
+            <div style="width: 100%; height: 6px; background: rgba(255,255,255,0.08); border-radius: 999px; overflow: hidden; margin: 4px 0;">
+              <div id="barCompCancels" style="height: 100%; width: 0%; background: #38bdf8; border-radius: 999px; transition: width 0.5s ease;"></div>
             </div>
-            <div style="height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden;">
-              <div id="barCompCancels" style="height: 100%; width: 0%; background: #3b82f6; transition: width 0.4s ease;"></div>
-            </div>
+            <span style="font-size: 0.70rem; color: #64748b; font-weight: 500; text-align: center;">Tolerancia ≤5% · Ponderación 30%</span>
           </div>
-          <div style="background: rgba(30, 41, 59, 0.5); padding: 10px 14px; border-radius: 8px;">
-            <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 4px;">
-              <span style="color: #94a3b8;">Nivel de Productividad</span>
-              <span id="scoreCompProd" style="font-weight: 700; color: #fff;">--%</span>
+
+          <!-- Componente 3: Productividad -->
+          <div style="background: rgba(14, 18, 48, 0.7); border: 1px solid rgba(139, 92, 246, 0.16); padding: 14px 18px; border-radius: 10px; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;">
+            <span style="font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8; font-weight: 700; text-align: center;">Nivel de Productividad</span>
+            <div id="scoreCompProd" style="font-size: 1.65rem; font-weight: 800; color: #a78bfa; line-height: 1.1; text-align: center; font-variant-numeric: tabular-nums;">--%</div>
+            <div style="width: 100%; height: 6px; background: rgba(255,255,255,0.08); border-radius: 999px; overflow: hidden; margin: 4px 0;">
+              <div id="barCompProd" style="height: 100%; width: 0%; background: #8b5cf6; border-radius: 999px; transition: width 0.5s ease;"></div>
             </div>
-            <div style="height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden;">
-              <div id="barCompProd" style="height: 100%; width: 0%; background: #8b5cf6; transition: width 0.4s ease;"></div>
-            </div>
+            <span style="font-size: 0.70rem; color: #64748b; font-weight: 500; text-align: center;">Target 1.20 paq/h · Ponderación 30%</span>
           </div>
         </div>
       </section>
@@ -1274,20 +1276,20 @@
             </button>
           </div>
 
-          <!-- Sugerencias de Preguntas Frecuentes -->
+          <!-- Sugerencias de Preguntas Frecuentes con Textos Centrados y Estructurados -->
           <div style="margin-bottom: 14px;">
-            <div style="font-size: 0.75rem; text-transform: uppercase; color: #94a3b8; font-weight: 600; margin-bottom: 6px;">Preguntas Frecuentes:</div>
-            <div style="display: flex; flex-wrap: wrap; gap: 6px;">
-              <button class="intel-prompt-btn pill pill-neutral" data-query="¿Qué tiendas tienen más vacantes o cancelaciones sin reemplazo?" style="cursor: pointer; font-size: 0.75rem; text-align: left;">
+            <div style="font-size: 0.72rem; text-transform: uppercase; color: #94a3b8; font-weight: 700; letter-spacing: 0.04em; margin-bottom: 8px;">Preguntas Frecuentes:</div>
+            <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+              <button class="intel-prompt-btn pill pill-neutral" data-query="¿Qué tiendas tienen más vacantes o cancelaciones sin reemplazo?" style="cursor: pointer; font-size: 0.76rem; text-align: center; justify-content: center; padding: 6px 12px; border-radius: 8px;">
                 🏪 ¿Qué tiendas tienen más vacantes?
               </button>
-              <button class="intel-prompt-btn pill pill-neutral" data-query="¿Qué ciudad presentó el mejor y peor desempeño?" style="cursor: pointer; font-size: 0.75rem; text-align: left;">
+              <button class="intel-prompt-btn pill pill-neutral" data-query="¿Qué ciudad presentó el mejor y peor desempeño?" style="cursor: pointer; font-size: 0.76rem; text-align: center; justify-content: center; padding: 6px 12px; border-radius: 8px;">
                 🏙️ Comparar desempeño de ciudades
               </button>
-              <button class="intel-prompt-btn pill pill-neutral" data-query="¿Qué pilotos presentan mayores cancelaciones o alertas de asistencia?" style="cursor: pointer; font-size: 0.75rem; text-align: left;">
+              <button class="intel-prompt-btn pill pill-neutral" data-query="¿Qué pilotos presentan mayores cancelaciones o alertas de asistencia?" style="cursor: pointer; font-size: 0.76rem; text-align: center; justify-content: center; padding: 6px 12px; border-radius: 8px;">
                 🛵 Pilotos con alertas de asistencia
               </button>
-              <button class="intel-prompt-btn pill pill-neutral" data-query="Dame un resumen de los principales riesgos y recomendaciones de esta semana" style="cursor: pointer; font-size: 0.75rem; text-align: left;">
+              <button class="intel-prompt-btn pill pill-neutral" data-query="Dame un resumen de los principales riesgos y recomendaciones de esta semana" style="cursor: pointer; font-size: 0.76rem; text-align: center; justify-content: center; padding: 6px 12px; border-radius: 8px;">
                 ⚡ Diagnóstico integral de riesgos
               </button>
             </div>
@@ -1650,18 +1652,18 @@
   <script src="./js/vendor/chart.umd.min.js"></script>
 
   <!-- Módulos de la Aplicación -->
-  <script src="./js/config.js?v=20261120_v109"></script>
-  <script src="./js/productivity-matrix.js?v=20261120_v109"></script>
-  <script src="./js/rules.js?v=20261120_v109"></script>
-  <script src="./js/operational-rules-engine.js?v=20261120_v109"></script>
-  <script src="./js/operational-ai-analyst.js?v=20261120_v109"></script>
-  <script src="./js/storage-db.js?v=20261120_v109"></script>
-  <script src="./js/sheets-service.js?v=20261120_v109"></script>
-  <script src="./js/coverage-engine.js?v=20261120_v109"></script>
-  <script src="./js/charts.js?v=20261120_v109"></script>
-  <script src="./js/data.js?v=20261120_v109"></script>
-  <script src="./js/llamados-service.js?v=20261120_v109"></script>
-  <script src="./js/app.js?v=20261120_v109"></script>
+  <script src="./js/config.js?v=20261120_v110"></script>
+  <script src="./js/productivity-matrix.js?v=20261120_v110"></script>
+  <script src="./js/rules.js?v=20261120_v110"></script>
+  <script src="./js/operational-rules-engine.js?v=20261120_v110"></script>
+  <script src="./js/operational-ai-analyst.js?v=20261120_v110"></script>
+  <script src="./js/storage-db.js?v=20261120_v110"></script>
+  <script src="./js/sheets-service.js?v=20261120_v110"></script>
+  <script src="./js/coverage-engine.js?v=20261120_v110"></script>
+  <script src="./js/charts.js?v=20261120_v110"></script>
+  <script src="./js/data.js?v=20261120_v110"></script>
+  <script src="./js/llamados-service.js?v=20261120_v110"></script>
+  <script src="./js/app.js?v=20261120_v110"></script>
 </body>
 </html>
 

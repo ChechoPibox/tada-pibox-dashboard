@@ -1240,6 +1240,12 @@ function switchTab(tabId) {
     }
   });
 
+  // Control de visibilidad del contenedor de KPIs de Módulo 1 (evita solapamientos en otras pestañas)
+  const kpisContainer = document.getElementById('kpisContainer');
+  if (kpisContainer) {
+    kpisContainer.style.display = (tabId === 'malla') ? 'grid' : 'none';
+  }
+
   // Si el usuario estaba desplazado abajo en una tabla o reporte, regresar al inicio de forma fluida
   const shell = document.getElementById('stickyNavigationShell');
   const shellHeight = shell ? shell.offsetHeight : 120;
@@ -4619,11 +4625,11 @@ function renderMonthVsMonthTable(data) {
     return `
       <tr>
         <td><strong>${r.kpi}</strong></td>
-        <td style="color:#fff; font-weight:700;">${formatVal(valC)}</td>
-        <td style="color:var(--text-muted);">${formatVal(valP)}</td>
-        <td><strong style="color:${badgeClass === 'diff-good' ? '#34d399' : badgeClass === 'diff-bad' ? '#f87171' : 'var(--text-muted)'};">${diffStr}</strong></td>
-        <td><span class="diff-badge ${badgeClass}">${pctStr}</span></td>
-        <td><span class="diff-badge ${badgeClass}">${icon} ${badgeClass === 'diff-good' ? 'Favorable' : badgeClass === 'diff-bad' ? 'Desfavorable' : 'Estable'}</span></td>
+        <td style="color:#fff; font-weight:700; text-align:center;">${formatVal(valC)}</td>
+        <td style="color:var(--text-muted); text-align:center;">${formatVal(valP)}</td>
+        <td style="text-align:center;"><strong style="color:${badgeClass === 'diff-good' ? '#34d399' : badgeClass === 'diff-bad' ? '#f87171' : 'var(--text-muted)'};">${diffStr}</strong></td>
+        <td style="text-align:center;"><span class="diff-badge ${badgeClass}">${pctStr}</span></td>
+        <td style="text-align:center;"><span class="diff-badge ${badgeClass}">${icon} ${badgeClass === 'diff-good' ? 'Favorable' : badgeClass === 'diff-bad' ? 'Desfavorable' : 'Estable'}</span></td>
       </tr>
     `;
   }).join('');
@@ -5143,8 +5149,10 @@ function renderIntelligenceCenter() {
   if (alertsContainer) {
     if (!rulesEval.alerts || rulesEval.alerts.length === 0) {
       alertsContainer.innerHTML = `
-        <div style="text-align: center; padding: 28px 16px; color: var(--text-muted); font-size: 0.85rem;">
-          ✅ No se detectan anomalías operativas bajo los filtros seleccionados. Todas las condiciones cumplen las reglas.
+        <div style="text-align: center; padding: 36px 20px; color: var(--text-muted); font-size: 0.85rem; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;">
+          <span style="font-size: 1.8rem;">✅</span>
+          <strong style="color: #34d399; font-size: 0.95rem;">Operación Dentro de Parámetros</strong>
+          <span style="color: var(--text-dim); max-width: 420px; line-height: 1.4;">No se detectan anomalías operativas bajo los filtros seleccionados. Todas las condiciones cumplen las reglas.</span>
         </div>
       `;
     } else {
@@ -5194,8 +5202,12 @@ function renderDecisionsTable() {
   if (decisions.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="5" style="text-align: center; padding: 20px; color: var(--text-muted); font-size: 0.8rem;">
-          ℹ️ No hay decisiones registradas aún. Haz clic en <strong>"+ Registrar Acción"</strong> en cualquier alerta para iniciar el seguimiento.
+        <td colspan="5" style="text-align: center; padding: 32px 20px; color: var(--text-muted); font-size: 0.82rem;">
+          <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;">
+            <span style="font-size: 1.6rem;">📋</span>
+            <strong style="color: #fff; font-size: 0.9rem;">Sin decisiones registradas aún</strong>
+            <span style="color: var(--text-dim); max-width: 440px; line-height: 1.4;">Haz clic en <strong>"+ Registrar Acción"</strong> en cualquier alerta operativa para iniciar el seguimiento y trazabilidad.</span>
+          </div>
         </td>
       </tr>
     `;
