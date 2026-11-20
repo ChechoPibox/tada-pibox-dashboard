@@ -227,6 +227,55 @@ function classifyShiftStatus(rawStatus) {
 }
 
 /**
+ * Función canónica universal para verificar si un turno debe ser excluido
+ * del denominador de efectividad, cobertura y cancelaciones operativas.
+ */
+function isOperationalShiftExcluded(rawStatus) {
+  const s = String(rawStatus || '').trim().toLowerCase();
+  if (!s) return false;
+  return (
+    s.includes('tienda cerrada') ||
+    s === 'cerrada' ||
+    s.includes('cliente cancela') ||
+    s.includes('cancela cliente') ||
+    s.includes('cliente canceló') ||
+    s.includes('cliente cancelo') ||
+    (s.includes('cliente') && s.includes('cancel')) ||
+    s.includes('adicional no autoriz') ||
+    s.includes('no autorizado') ||
+    s === 'adicional autorizado' ||
+    s.includes('adicional cancel') ||
+    s.includes('no programado')
+  );
+}
+
+/**
+ * Función canónica universal para verificar si una cancelación es
+ * imputable directamente al piloto conductor.
+ */
+function isOperationalPilotCancel(shift) {
+  if (!shift) return false;
+  if (shift.pilot_cancel) return true;
+  const s = String(shift.status || '').trim().toLowerCase();
+  return (
+    s === 'piloto cancela' ||
+    s === 'cancela piloto' ||
+    s === 'piloto canceló' ||
+    s === 'piloto cancelo' ||
+    (s.includes('piloto') && s.includes('cancel'))
+  );
+}
+
+if (typeof window !== 'undefined') {
+  window.isOperationalShiftExcluded = isOperationalShiftExcluded;
+  window.isOperationalPilotCancel = isOperationalPilotCancel;
+}
+if (typeof global !== 'undefined') {
+  global.isOperationalShiftExcluded = isOperationalShiftExcluded;
+  global.isOperationalPilotCancel = isOperationalPilotCancel;
+}
+
+/**
  * Normaliza nombres para comparación flexible de tiendas y días
  */
 function normalizeKeyStr(s) {
@@ -1763,25 +1812,7 @@ const Modulo3IntelligenceEngine = {
       const prodPaqH = hours > 0 ? (packages / hours) : 0;
 
       // Cancelaciones imputables exclusivamente al piloto
-      const pilotCancels = p.shifts.filter(s => {
-        const rawSt = (s.status || '').toLowerCase().trim();
-        const isExcluded = (
-          rawSt.includes('tienda cerrada') ||
-          rawSt === 'cerrada' ||
-          rawSt.includes('adicional no autoriz') ||
-          rawSt.includes('cliente cancela') ||
-          rawSt.includes('cancela cliente') ||
-          rawSt.includes('adicional cancel') ||
-          rawSt.includes('no programado')
-        );
-        if (isExcluded) return false;
-        return Boolean(
-          s.pilot_cancel ||
-          rawSt === 'piloto cancela' ||
-          rawSt === 'cancela piloto' ||
-          (rawSt.includes('piloto') && rawSt.includes('cancel'))
-        );
-      }).length;
+      const pilotCancels = p.shifts.filter(s => !isOperationalShiftExcluded(s.status) && isOperationalPilotCancel(s)).length;
 
       const evaluableShifts = attendedCount + pilotCancels;
       const attendancePct = evaluableShifts > 0 ? (attendedCount / evaluableShifts) * 100 : 0;
@@ -1903,25 +1934,7 @@ const Modulo3IntelligenceEngine = {
       const prodPaqH = hours > 0 ? (packages / hours) : 0;
 
       // Cancelaciones imputables exclusivamente al piloto
-      const pilotCancels = p.shifts.filter(s => {
-        const rawSt = (s.status || '').toLowerCase().trim();
-        const isExcluded = (
-          rawSt.includes('tienda cerrada') ||
-          rawSt === 'cerrada' ||
-          rawSt.includes('adicional no autoriz') ||
-          rawSt.includes('cliente cancela') ||
-          rawSt.includes('cancela cliente') ||
-          rawSt.includes('adicional cancel') ||
-          rawSt.includes('no programado')
-        );
-        if (isExcluded) return false;
-        return Boolean(
-          s.pilot_cancel ||
-          rawSt === 'piloto cancela' ||
-          rawSt === 'cancela piloto' ||
-          (rawSt.includes('piloto') && rawSt.includes('cancel'))
-        );
-      }).length;
+      const pilotCancels = p.shifts.filter(s => !isOperationalShiftExcluded(s.status) && isOperationalPilotCancel(s)).length;
 
       const evaluableShifts = attendedCount + pilotCancels;
       const attendancePct = evaluableShifts > 0 ? (attendedCount / evaluableShifts) * 100 : 0;
@@ -2062,19 +2075,13 @@ const Modulo3IntelligenceEngine = {
           packages = 0, hours = 0;
 
       groupShifts.forEach(s => {
-        const st = (s.status || '').toLowerCase().trim();
-        const isPilotCancel = (st.includes('piloto') && st.includes('cancel')) || Boolean(s.pilot_cancel);
-        const isExcluded = (
-          st === 'tienda cerrada' || st === 'cerrada' ||
-          st.includes('cliente cancela') || st.includes('cancela cliente') ||
-          st.includes('adicional no autoriz') || st.includes('adicional autorizado') ||
-          st.includes('adicional cancel') || st.includes('no programado')
-        );
+        const isPilotCancel = isOperationalPilotCancel(s);
+        const isExcluded = isOperationalShiftExcluded(s.status);
         if (!isExcluded) {
           totalShifts++;
           if (s.attended) attended++;
           if (isPilotCancel) cancels++;
-          if (st === 'reemplazo') reemplazos++;
+          if (String(s.status || '').toLowerCase().trim() === 'reemplazo') reemplazos++;
         }
         if (s.attended) {
           packages += (Number(s.packages) || 0);

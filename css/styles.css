@@ -2249,3 +2249,250 @@ html {
   color: var(--text-main);
   line-height: 1.45;
 }
+
+/* ============================================================
+   SISTEMA DE DISEÑO PREMIUM — AUDITORÍA INTEGRAL v106
+   Animaciones, Microinteracciones, Sistema de Tablas Unificado
+   ============================================================ */
+
+/* 1. SOPORTE DE ACCESIBILIDAD Y PREFERENCIAS DE MOVIMIENTO */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes fadeSlideUp {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+
+  @keyframes scaleIn {
+    from {
+      opacity: 0;
+      transform: scale(0.97);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  @keyframes shimmer {
+    0%   { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .section-panel {
+    animation: fadeSlideUp 0.25s ease both;
+  }
+
+  .kpi-card {
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease, border-color 0.2s ease;
+  }
+  .kpi-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45), 0 0 16px rgba(124, 58, 237, 0.22);
+    border-color: rgba(139, 92, 246, 0.35);
+  }
+
+  .btn {
+    transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .btn:hover {
+    transform: translateY(-1px);
+  }
+  .btn:active {
+    transform: translateY(1px) scale(0.98);
+  }
+
+  .btn-primary:hover {
+    box-shadow: 0 4px 16px rgba(124, 58, 237, 0.45);
+  }
+
+  .tab-content {
+    transition: opacity 0.22s ease, transform 0.22s ease;
+  }
+  .tab-content.tab-entering {
+    animation: fadeSlideUp 0.26s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .kpi-value {
+    transition: color 0.3s ease, transform 0.2s ease;
+  }
+  .kpi-value.kpi-updating {
+    color: var(--primary-light) !important;
+    transform: scale(1.03);
+  }
+}
+
+/* 2. SISTEMA UNIFICADO DE TABLAS (TABLAS PREMIUM) */
+.data-table,
+.compare-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.81rem;
+  text-align: left;
+}
+
+.data-table thead th,
+.compare-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: rgba(11, 14, 38, 0.96) !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: var(--text-muted);
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 0.70rem;
+  letter-spacing: 0.055em;
+  padding: 11px 14px;
+  border-bottom: 2px solid rgba(139, 92, 246, 0.28);
+  white-space: nowrap;
+  user-select: none;
+  transition: color 0.18s ease, background-color 0.18s ease;
+}
+
+.data-table thead th:not(.no-sort):hover,
+.compare-table thead th:not(.no-sort):hover {
+  color: #fff;
+  background-color: rgba(124, 58, 237, 0.18) !important;
+}
+
+.data-table tbody tr,
+.compare-table tbody tr {
+  transition: background-color 0.12s ease;
+}
+
+.data-table tbody tr:hover,
+.compare-table tbody tr:hover {
+  background-color: rgba(124, 58, 237, 0.07) !important;
+}
+
+.data-table td,
+.compare-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.045);
+  color: var(--text-main);
+  vertical-align: middle;
+  font-variant-numeric: tabular-nums;
+}
+
+.data-table tbody tr:last-child td,
+.compare-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.no-results-row td {
+  text-align: center;
+  padding: 24px;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  background: rgba(255, 255, 255, 0.015);
+}
+
+/* 3. CHIPS Y BADGES DE ESTADO ESTANDARIZADOS */
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: var(--radius-full);
+  font-size: 0.71rem;
+  font-weight: 700;
+  letter-spacing: 0.025em;
+  white-space: nowrap;
+}
+
+.status-chip.status-ok {
+  background: rgba(16, 185, 129, 0.14);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+}
+
+.status-chip.status-warn {
+  background: rgba(245, 158, 11, 0.14);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
+.status-chip.status-error {
+  background: rgba(239, 68, 68, 0.14);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+}
+
+.status-chip.status-info {
+  background: rgba(56, 189, 248, 0.14);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+}
+
+/* 4. SKELETON LOADERS Y SPINNERS MODERNOS */
+.skeleton-shimmer {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.02) 25%, rgba(255, 255, 255, 0.07) 50%, rgba(255, 255, 255, 0.02) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s infinite ease-in-out;
+  border-radius: var(--radius-sm);
+}
+
+.spinner-indicator {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(139, 92, 246, 0.25);
+  border-top-color: var(--primary-light);
+  border-radius: 50%;
+  animation: spin 0.65s linear infinite;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+/* 5. SCROLLBARS SLEEK GLOBALES */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(139, 92, 246, 0.32) rgba(255, 255, 255, 0.02);
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(7, 9, 26, 0.6);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(139, 92, 246, 0.35);
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(139, 92, 246, 0.65);
+}
+
+/* 6. CONTENEDOR DE ANÁLISIS DINÁMICO */
+#containerCityStoreAnalysis {
+  animation: fadeIn 0.3s ease both;
+}

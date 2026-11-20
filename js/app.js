@@ -305,7 +305,15 @@ function updateActiveFiltersBadges() {
   const semana = document.getElementById('filterSemana');
   const semanaLabel = semana?.options[semana.selectedIndex]?.text;
 
-  if (city)   badges.push({ label: `Ciudad: ${city}`,      clear: () => { document.getElementById('filterCity').value = ''; applyFilters(); } });
+  if (city)   badges.push({
+    label: `Ciudad: ${city}`,
+    clear: () => {
+      document.getElementById('filterCity').value = '';
+      const allStores = [...new Set(AppState.mallaShifts.map(r => r.store).filter(Boolean))].sort();
+      updateSelectOptions('filterStore', allStores, 'Todos los puntos');
+      applyFilters();
+    }
+  });
   if (store)  badges.push({ label: `Tienda: ${store}`,     clear: () => { document.getElementById('filterStore').value = ''; applyFilters(); } });
   if (from)   badges.push({ label: `Desde: ${from}`,       clear: () => { document.getElementById('filterFrom').value = ''; document.getElementById('filterFromPicker').value = ''; applyFilters(); } });
   if (to)     badges.push({ label: `Hasta: ${to}`,         clear: () => { document.getElementById('filterTo').value = ''; document.getElementById('filterToPicker').value = ''; applyFilters(); } });
@@ -396,18 +404,47 @@ function setupColumnSelector(btnId, dropdownId, tableId) {
 
 // ============================================================
 // IN-TABLE SEARCH (Live Filter within rendered table)
+// Búsqueda en tiempo real con normalización de acentos y debounce
 // ============================================================
 function setupInTableSearch(inputId, tbodyId) {
   const input = document.getElementById(inputId);
   if (!input) return;
+
+  const normalizeStr = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+
+  let searchTimeout = null;
   input.addEventListener('input', () => {
-    const q = input.value.trim().toLowerCase();
-    const tbody = document.getElementById(tbodyId);
-    if (!tbody) return;
-    Array.from(tbody.rows).forEach(row => {
-      const text = row.innerText.toLowerCase();
-      row.style.display = !q || text.includes(q) ? '' : 'none';
-    });
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => {
+      const q = normalizeStr(input.value);
+      const tbody = document.getElementById(tbodyId);
+      if (!tbody) return;
+
+      let visibleCount = 0;
+      const rows = Array.from(tbody.rows);
+      rows.forEach(row => {
+        if (row.classList.contains('no-results-row')) return;
+        const text = normalizeStr(row.innerText);
+        const match = !q || text.includes(q);
+        row.style.display = match ? '' : 'none';
+        if (match) visibleCount++;
+      });
+
+      // Gestionar fila de estado sin resultados
+      let noRes = tbody.querySelector('.no-results-row');
+      if (visibleCount === 0 && q) {
+        if (!noRes) {
+          noRes = document.createElement('tr');
+          noRes.className = 'no-results-row';
+          const cols = rows.find(r => !r.classList.contains('no-results-row'))?.cells?.length || 10;
+          noRes.innerHTML = `<td colspan="${cols}" style="text-align:center; padding:24px; color:var(--text-muted); font-size:0.82rem;">🔍 No se encontraron registros coincidentes con "<strong>${escapeHtml(input.value)}</strong>".</td>`;
+          tbody.appendChild(noRes);
+        }
+        noRes.style.display = '';
+      } else if (noRes) {
+        noRes.style.display = 'none';
+      }
+    }, 120);
   });
 }
 
@@ -417,7 +454,7 @@ function setupInTableSearch(inputId, tbodyId) {
 // ============================================================
 function setupUniversalTableSorting() {
   document.addEventListener('click', function(e) {
-    const th = e.target.closest('table.data-table thead th');
+    const th = e.target.closest('table.data-table thead th, table.compare-table thead th');
     if (!th) return;
 
     // Ignorar si tiene la clase no-sort
@@ -680,7 +717,7 @@ async function initApp() {
     const meta = await TaDaDB.getMeta('last_sync');
 
     // Detectar caché obsoleto, incompleto o con esquema previo
-    const CACHE_VERSION = '2026-11-20-v105-alerts-rankings-modulo3';
+    const CACHE_VERSION = '2026-11-20-v106-integral-audit-system';
     const cachedVersion = await TaDaDB.getMeta('cache_version');
     const versionMismatch = cachedVersion !== CACHE_VERSION;
     const cachedCities = new Set(cachedMalla.map(r => r.city).filter(Boolean));
@@ -754,7 +791,7 @@ async function triggerLiveSync() {
   } catch (err) {
     console.error('Error sincronizando Google Sheets:', err);
     if (statusEl) {
-      statusEl.innerHTML = `<span style="color:#ef4444;">❌ Falló sincronización: ${err.message}. Usando caché local.</span>`;
+      statusEl.innerHTML = `<span style="color:#ef4444;">❌ Falló sincronización: ${escapeHtml(err.message || 'Error desconocido')}. Usando caché local.</span>`;
     }
   } finally {
     if (syncBtn) {
@@ -916,29 +953,31 @@ function setupEventListeners() {
     });
   });
 
-  // Filtros estándar de texto y selección simple
-  ['filterCity', 'filterStore', 'filterPilot', 'filterDemand'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) {
-      el.addEventListener('input', () => applyFilters());
-      el.addEventListener('change', () => applyFilters());
-    }
-  });
+  // Filtros estándar de texto y selección simple coordinados
+  const citySelect = document.getElementById('filterCity');
+  if (citySelect) {
+    citySelect.addEventListener('change', () => {
+      const c = citySelect.value;
+      const storeSelect = document.getElementById('filterStore');
+      const stores = [...new Set(AppState.mallaShifts.filter(r => !c || r.city === c).map(r => r.store).filter(Boolean))].sort();
+      if (storeSelect && storeSelect.value && !stores.includes(storeSelect.value)) {
+        storeSelect.value = '';
+      }
+      updateSelectOptions('filterStore', stores, 'Todos los puntos');
+      applyFilters();
+    });
+  }
+
+  document.getElementById('filterStore')?.addEventListener('change', () => applyFilters());
+  document.getElementById('filterDemand')?.addEventListener('change', () => applyFilters());
+  document.getElementById('filterPilot')?.addEventListener('input', () => debouncedApplyFilters(180));
+  document.getElementById('filterPilot')?.addEventListener('change', () => applyFilters());
 
   // Selector de Fechas Híbrido (DatePicker visual + Ingreso manual DD/MM/AAAA o AAAA-MM-DD)
   setupHybridDatePickers();
 
   // Nuevos Filtros Multiselect
   setupMultiSelects();
-
-  const citySelect = document.getElementById('filterCity');
-  if (citySelect) {
-    citySelect.addEventListener('change', () => {
-      const c = citySelect.value;
-      const stores = [...new Set(AppState.mallaShifts.filter(r => !c || r.city === c).map(r => r.store).filter(Boolean))].sort();
-      updateSelectOptions('filterStore', stores, 'Todos los puntos');
-    });
-  }
 
   // Botones header
   document.getElementById('btnSyncLive')?.addEventListener('click', triggerLiveSync);
@@ -1131,13 +1170,13 @@ function setupHybridDatePickers() {
   fromText?.addEventListener('input', () => {
     const iso = parseHybridDate(fromText.value);
     if (iso && fromPicker) fromPicker.value = iso;
-    applyFilters();
+    debouncedApplyFilters(200);
   });
 
   toText?.addEventListener('input', () => {
     const iso = parseHybridDate(toText.value);
     if (iso && toPicker) toPicker.value = iso;
-    applyFilters();
+    debouncedApplyFilters(200);
   });
 }
 
@@ -1179,12 +1218,22 @@ function setupMultiSelects() {
 }
 
 function switchTab(tabId) {
+  if (!tabId) return;
   AppState.activeTab = tabId;
   document.querySelectorAll('.nav-tab').forEach(t => {
     t.classList.toggle('active', t.getAttribute('data-tab') === tabId);
   });
   document.querySelectorAll('.tab-content').forEach(c => {
-    c.style.display = c.id === `tab-${tabId}` ? 'block' : 'none';
+    const isTarget = c.id === `tab-${tabId}`;
+    if (isTarget) {
+      c.style.display = 'block';
+      c.classList.remove('tab-entering');
+      void c.offsetWidth;
+      c.classList.add('tab-active', 'tab-entering');
+    } else {
+      c.style.display = 'none';
+      c.classList.remove('tab-active', 'tab-entering');
+    }
   });
 
   // Si el usuario estaba desplazado abajo en una tabla o reporte, regresar al inicio de forma fluida
@@ -1272,7 +1321,8 @@ function populateFilterOptions() {
   const cities = [...new Set(AppState.mallaShifts.map(r => r.city).filter(Boolean))].sort();
   updateSelectOptions('filterCity', cities, 'Todas las ciudades');
 
-  const stores = [...new Set(AppState.mallaShifts.map(r => r.store).filter(Boolean))].sort();
+  const selectedCity = document.getElementById('filterCity')?.value || '';
+  const stores = [...new Set(AppState.mallaShifts.filter(r => !selectedCity || r.city === selectedCity).map(r => r.store).filter(Boolean))].sort();
   updateSelectOptions('filterStore', stores, 'Todos los puntos');
 
   // Calcular y almacenar semanas disponibles combinando Malla histórica y Programación activa (estrictamente Lunes a Domingo)
@@ -1356,6 +1406,14 @@ function updateSelectOptions(elementId, items, defaultLabel) {
   });
   el.innerHTML = html;
   if (items.includes(current)) el.value = current;
+}
+
+let _applyFiltersTimeout = null;
+function debouncedApplyFilters(delay = 180) {
+  clearTimeout(_applyFiltersTimeout);
+  _applyFiltersTimeout = setTimeout(() => {
+    applyFilters();
+  }, delay);
 }
 
 // Aplicar filtros globales evaluando cada fecha con corte horario de 12:00 PM
@@ -1454,8 +1512,15 @@ function resetFilters() {
   if (document.getElementById('filterStore')) document.getElementById('filterStore').value = '';
   if (document.getElementById('filterPilot')) document.getElementById('filterPilot').value = '';
   if (document.getElementById('filterDemand')) document.getElementById('filterDemand').value = '';
-  // Clear in-table searches
-  ['mallaTableSearch','coberturaTableSearch','flotaTableSearch'].forEach(id => {
+
+  // Restaurar todas las tiendas disponibles al resetear filtros
+  if (AppState.mallaShifts && AppState.mallaShifts.length > 0) {
+    const allStores = [...new Set(AppState.mallaShifts.map(r => r.store).filter(Boolean))].sort();
+    updateSelectOptions('filterStore', allStores, 'Todos los puntos');
+  }
+
+  // Limpiar todos los buscadores in-table
+  ['mallaTableSearch', 'coberturaTableSearch', 'flotaTableSearch', 'escalafonTableSearch', 'inputFilterCoverageStoreTable'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
@@ -1824,6 +1889,14 @@ function renderKpis() {
       <div class="kpi-sub">${c.sub}</div>
     </div>
   `).join('');
+
+  // Microinteracción visual fluida al actualizar cifras KPI
+  if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    container.querySelectorAll('.kpi-value').forEach(el => {
+      el.classList.add('kpi-updating');
+      setTimeout(() => el.classList.remove('kpi-updating'), 350);
+    });
+  }
 }
 
 // ============================================================
@@ -2426,8 +2499,11 @@ function renderModulo3Visuals() {
   AppState._currentModulo3TargetShifts = targetMalla;
   const currentTopN = AppState._currentTopPilotsN || 3;
 
+  // Calcular estadísticas de cobertura de tiendas una sola vez para reutilizarlas
+  const coverageStoreStats = typeof Modulo3IntelligenceEngine !== 'undefined' ? Modulo3IntelligenceEngine.computeStoreCoverageStats(targetMalla) : [];
+
   // 1. Renderizar Tabla de Cobertura, Faltantes y Reemplazos por Punto (Req 2)
-  renderModulo3StoreCoverageTable(targetMalla);
+  renderModulo3StoreCoverageTable(targetMalla, coverageStoreStats);
 
   // 2. Renderizar TOPs de Tiendas y Pilotos por Productividad y Asistencia (Req 4 y 5)
   renderModulo3RecognitionRankings(targetMalla, currentTopN);
@@ -2438,7 +2514,6 @@ function renderModulo3Visuals() {
   // 3. Renderizar Feedback Ejecutivo y Recomendaciones Operativas (Req 6)
   const currentWeekKpis = typeof calculateModulo1Kpis === 'function' ? calculateModulo1Kpis(targetMalla, APP_CONFIG) : null;
   const lastComp = ChartManager._lastMonthVsMonthData;
-  const coverageStoreStats = typeof Modulo3IntelligenceEngine !== 'undefined' ? Modulo3IntelligenceEngine.computeStoreCoverageStats(targetMalla) : [];
   renderModulo3ExecutiveFeedback(currentWeekKpis, lastComp?.prevMet?.fullKpis, coverageStoreStats, selectedWeek);
 
 
@@ -4278,11 +4353,11 @@ document.addEventListener('visibilitychange', () => {
 /**
  * REQUERIMIENTO 2: Renderiza la tabla de Cobertura y Faltantes por Punto
  */
-function renderModulo3StoreCoverageTable(targetShifts) {
+function renderModulo3StoreCoverageTable(targetShifts, precomputedStats = null) {
   const tbody = document.getElementById('tableModulo3StoreCoverageBody');
   if (!tbody || typeof Modulo3IntelligenceEngine === 'undefined') return;
 
-  const stats = Modulo3IntelligenceEngine.computeStoreCoverageStats(targetShifts);
+  const stats = precomputedStats || Modulo3IntelligenceEngine.computeStoreCoverageStats(targetShifts);
   const filterInput = document.getElementById('inputFilterCoverageStoreTable');
   const query = (filterInput?.value || '').trim().toLowerCase();
 

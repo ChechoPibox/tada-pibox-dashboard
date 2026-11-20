@@ -456,9 +456,13 @@ const ChartManager = {
       if (!canonicalDay || !dayMap[canonicalDay]) return;
 
       const st = (s.status || '').toLowerCase().trim();
-      const isPilotCancel = st === 'piloto cancela' || st === 'cancela piloto' || st === 'piloto canceló' || st === 'piloto cancelo';
+      const isPilotCancel = typeof isOperationalPilotCancel === 'function'
+        ? isOperationalPilotCancel(s)
+        : (st.includes('piloto') && st.includes('cancel')) || Boolean(s.pilot_cancel);
       const isReplacement = st === 'reemplazo';
-      const isExcluded = st === 'tienda cerrada' || st === 'cliente cancela' || st === 'adicional autorizado' || st === 'adicional no autorizado' || st === 'adicional cancela';
+      const isExcluded = typeof isOperationalShiftExcluded === 'function'
+        ? isOperationalShiftExcluded(s.status)
+        : (st.includes('tienda cerrada') || st === 'cerrada' || st.includes('cliente cancela') || st.includes('adicional no autoriz') || st === 'adicional autorizado' || st.includes('adicional cancel') || st.includes('no programado'));
       const isAttended = s.attended !== undefined ? s.attended : (st === 'confirmado' || isReplacement || st === 'adicional tada');
 
       if (isExcluded) return;
@@ -846,8 +850,12 @@ const ChartManager = {
       }
       const g = groupMap[groupKey];
       const st = (s.status || '').toLowerCase().trim();
-      const isPilotCancel = st.includes('piloto') && st.includes('cancel');
-      const isExcluded = st === 'tienda cerrada' || st === 'cliente cancela' || st === 'adicional no autorizado' || st === 'adicional autorizado' || st === 'adicional cancela';
+      const isPilotCancel = typeof isOperationalPilotCancel === 'function'
+        ? isOperationalPilotCancel(s)
+        : (st.includes('piloto') && st.includes('cancel')) || Boolean(s.pilot_cancel);
+      const isExcluded = typeof isOperationalShiftExcluded === 'function'
+        ? isOperationalShiftExcluded(s.status)
+        : (st.includes('tienda cerrada') || st === 'cerrada' || st.includes('cliente cancela') || st.includes('adicional no autoriz') || st === 'adicional autorizado' || st.includes('adicional cancel') || st.includes('no programado'));
 
       if (!isExcluded) {
         g.totalShifts++;
