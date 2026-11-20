@@ -781,6 +781,7 @@ async function triggerLiveSync() {
 
     updateTemporalBanner();
     updateSyncStatus(`En vivo · Sincronizado hace un momento (${AppState.mallaShifts.length + AppState.progShifts.length} turnos)`);
+    if (typeof filterQueryCache !== 'undefined') filterQueryCache.clear();
     populateFilterOptions();
     applyFilters();
 
@@ -1253,12 +1254,26 @@ function switchTab(tabId) {
     setTimeout(() => {
       renderModulo3Visuals();
       if (typeof initDualScrollbars === 'function') initDualScrollbars();
+      // Redimensionar gráficos activos para asegurar adaptación de ancho precisa
+      if (typeof Chart !== 'undefined' && Chart.instances) {
+        Object.values(Chart.instances).forEach(ch => {
+          try { ch.resize(); } catch(e) {}
+        });
+      }
     }, 50);
   }
 
   // Si entra al Módulo 2 (Cobertura Preventiva), refrescar análisis
   if (tabId === 'cobertura') {
     renderModulo2Coverage();
+    setTimeout(() => {
+      if (typeof initDualScrollbars === 'function') initDualScrollbars();
+      if (typeof Chart !== 'undefined' && Chart.instances) {
+        Object.values(Chart.instances).forEach(ch => {
+          try { ch.resize(); } catch(e) {}
+        });
+      }
+    }, 50);
   }
 
   // Si entra a la Ficha de Piloto y no hay seleccionado, tomar el primero
@@ -1417,6 +1432,18 @@ function debouncedApplyFilters(delay = 180) {
 }
 
 // Aplicar filtros globales evaluando cada fecha con corte horario de 12:00 PM
+// Cache memoizado para consultas de filtros recurrentes
+const filterQueryCache = {
+  key: '',
+  filteredMalla: null,
+  filteredProg: null,
+  clear() {
+    this.key = '';
+    this.filteredMalla = null;
+    this.filteredProg = null;
+  }
+};
+
 function applyFilters() {
   // Mostrar skeleton mientras se filtra
   showSkeletonKpis();
@@ -1429,57 +1456,72 @@ function applyFilters() {
   const toIso = parseHybridDate(toRaw);
   const pilotQuery = (document.getElementById('filterPilot')?.value || '').trim().toLowerCase();
   const demand = document.getElementById('filterDemand')?.value || '';
+  const daysKey = (AppState.selectedDays || []).join(',');
+  const timesKey = (AppState.selectedStartTimes || []).join(',');
 
-  // Filtrar Malla (Sheet 1) con validación horaria de 12:00 PM por día puntual
-  AppState.filteredMalla = AppState.mallaShifts.filter(r => {
-    if (city && r.city !== city) return false;
-    if (store && r.store !== store) return false;
-    if ((fromIso || toIso) && !isDateInRangeWithNoonCut(r.date, fromIso, toIso)) return false;
-    if (pilotQuery) {
-      const matchP = (r.pilot || '').toLowerCase().includes(pilotQuery);
-      const matchId = (r.pilot_id || '').toLowerCase().includes(pilotQuery);
-      if (!matchP && !matchId) return false;
-    }
-    if (demand === 'low' && !r.low_demand) return false;
-    if (demand === 'normal' && r.low_demand) return false;
+  // Generar clave única de cache para los filtros actuales
+  const cacheKey = `${city}|${store}|${fromIso}|${toIso}|${pilotQuery}|${demand}|${daysKey}|${timesKey}|${AppState.mallaShifts.length}|${AppState.progShifts.length}`;
 
-    // Filtro por Día de la Semana (Multiselect)
-    if (AppState.selectedDays && AppState.selectedDays.length > 0) {
-      const rDay = normalizeKeyStr(r.weekday || '');
-      const dayMatches = AppState.selectedDays.some(d => normalizeKeyStr(d) === rDay);
-      if (!dayMatches) return false;
-    }
+  if (filterQueryCache.key === cacheKey && filterQueryCache.filteredMalla && filterQueryCache.filteredProg) {
+    AppState.filteredMalla = filterQueryCache.filteredMalla;
+    AppState.filteredProg = filterQueryCache.filteredProg;
+  } else {
+    // Filtrar Malla (Sheet 1) con validación horaria de 12:00 PM por día puntual
+    AppState.filteredMalla = AppState.mallaShifts.filter(r => {
+      if (city && r.city !== city) return false;
+      if (store && r.store !== store) return false;
+      if ((fromIso || toIso) && !isDateInRangeWithNoonCut(r.date, fromIso, toIso)) return false;
+      if (pilotQuery) {
+        const matchP = (r.pilot || '').toLowerCase().includes(pilotQuery);
+        const matchId = (r.pilot_id || '').toLowerCase().includes(pilotQuery);
+        if (!matchP && !matchId) return false;
+      }
+      if (demand === 'low' && !r.low_demand) return false;
+      if (demand === 'normal' && r.low_demand) return false;
 
-    // Filtro por Rango de Inicio de Turno (Multiselect)
-    if (AppState.selectedStartTimes && AppState.selectedStartTimes.length > 0) {
-      const rTimeStr = fmtMinutes(r.start);
-      if (!AppState.selectedStartTimes.includes(rTimeStr)) return false;
-    }
+      // Filtro por Día de la Semana (Multiselect)
+      if (AppState.selectedDays && AppState.selectedDays.length > 0) {
+        const rDay = normalizeKeyStr(r.weekday || '');
+        const dayMatches = AppState.selectedDays.some(d => normalizeKeyStr(d) === rDay);
+        if (!dayMatches) return false;
+      }
 
-    return true;
-  });
+      // Filtro por Rango de Inicio de Turno (Multiselect)
+      if (AppState.selectedStartTimes && AppState.selectedStartTimes.length > 0) {
+        const rTimeStr = fmtMinutes(r.start);
+        if (!AppState.selectedStartTimes.includes(rTimeStr)) return false;
+      }
 
-  // Filtrar Programación (Sheet 2) con validación horaria de 12:00 PM por día puntual
-  AppState.filteredProg = AppState.progShifts.filter(s => {
-    if (city && s.city !== city) return false;
-    if (store && s.store !== store) return false;
-    if ((fromIso || toIso) && !isDateInRangeWithNoonCut(s.date, fromIso, toIso)) return false;
-    if (pilotQuery && !s.is_vacant) {
-      const matchP = (s.pilot || '').toLowerCase().includes(pilotQuery);
-      const matchId = (s.pilot_id || '').toLowerCase().includes(pilotQuery);
-      if (!matchP && !matchId) return false;
-    }
-    if (AppState.selectedDays && AppState.selectedDays.length > 0) {
-      const sDay = normalizeKeyStr(s.weekday || '');
-      const dayMatches = AppState.selectedDays.some(d => normalizeKeyStr(d) === sDay);
-      if (!dayMatches) return false;
-    }
-    if (AppState.selectedStartTimes && AppState.selectedStartTimes.length > 0) {
-      const sTimeStr = fmtMinutes(s.start);
-      if (!AppState.selectedStartTimes.includes(sTimeStr)) return false;
-    }
-    return true;
-  });
+      return true;
+    });
+
+    // Filtrar Programación (Sheet 2) con validación horaria de 12:00 PM por día puntual
+    AppState.filteredProg = AppState.progShifts.filter(s => {
+      if (city && s.city !== city) return false;
+      if (store && s.store !== store) return false;
+      if ((fromIso || toIso) && !isDateInRangeWithNoonCut(s.date, fromIso, toIso)) return false;
+      if (pilotQuery && !s.is_vacant) {
+        const matchP = (s.pilot || '').toLowerCase().includes(pilotQuery);
+        const matchId = (s.pilot_id || '').toLowerCase().includes(pilotQuery);
+        if (!matchP && !matchId) return false;
+      }
+      if (AppState.selectedDays && AppState.selectedDays.length > 0) {
+        const sDay = normalizeKeyStr(s.weekday || '');
+        const dayMatches = AppState.selectedDays.some(d => normalizeKeyStr(d) === sDay);
+        if (!dayMatches) return false;
+      }
+      if (AppState.selectedStartTimes && AppState.selectedStartTimes.length > 0) {
+        const sTimeStr = fmtMinutes(s.start);
+        if (!AppState.selectedStartTimes.includes(sTimeStr)) return false;
+      }
+      return true;
+    });
+
+    // Guardar en cache memoizado
+    filterQueryCache.key = cacheKey;
+    filterQueryCache.filteredMalla = AppState.filteredMalla;
+    filterQueryCache.filteredProg = AppState.filteredProg;
+  }
 
   // Generar lista de pilotos agregados
   generatePilotsList();
@@ -1532,6 +1574,7 @@ function resetFilters() {
   multiSelectInicio?.clear();
   multiSelectEstado?.clear();
   try { localStorage.removeItem(FILTER_STORAGE_KEY); } catch(e) {}
+  if (typeof filterQueryCache !== 'undefined') filterQueryCache.clear();
   applyFilters();
 }
 
