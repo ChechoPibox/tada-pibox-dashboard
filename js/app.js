@@ -694,7 +694,7 @@ async function initApp() {
     const meta = await TaDaDB.getMeta('last_sync');
 
     // Detectar caché obsoleto, incompleto o con esquema previo
-    const CACHE_VERSION = '2026-11-20-v106-integral-audit-system';
+    const CACHE_VERSION = '2026-11-23-v117-sem47-malla-prog-sync';
     const cachedVersion = await TaDaDB.getMeta('cache_version');
     const versionMismatch = cachedVersion !== CACHE_VERSION;
     const cachedCities = new Set(cachedMalla.map(r => r.city).filter(Boolean));
@@ -1331,8 +1331,8 @@ function populateFilterOptions() {
   const stores = [...new Set(AppState.mallaShifts.filter(r => !selectedCity || r.city === selectedCity).map(r => r.store).filter(Boolean))].sort();
   updateSelectOptions('filterStore', stores, 'Todos los puntos');
 
-  // Calcular y almacenar semanas disponibles combinando Malla histórica y Programación activa (estrictamente Lunes a Domingo)
-  const allShiftsForWeeks = [...AppState.mallaShifts, ...AppState.progShifts];
+  // Calcular y almacenar semanas disponibles desde la Malla consolidada (estrictamente Lunes a Domingo)
+  const allShiftsForWeeks = AppState.mallaShifts;
   AppState.availableWeeks = computeAvailableWeeks(allShiftsForWeeks);
 
   // Asegurar que la ventana temporal esté debidamente sanitizada y la semana actual (calculada con corte de 12 PM) siempre presente

@@ -608,13 +608,6 @@ function reconcileShiftsMatch(shifts) {
     const matched = Math.min(g.cancels, g.reemplazos);
     const unmatched = Math.max(0, g.cancels - g.reemplazos);
 
-    // LOG DIAGNÓSTICO: registrar cada grupo con cancelaciones o reemplazos
-    if (g.cancels > 0 || g.reemplazos > 0) {
-      const cancelPilots = g.shifts.filter(x => {const xst=(x.status||'').toLowerCase(); return xst.includes('cancela');}).map(x => x.pilot).join(', ');
-      const repPilots = g.shifts.filter(x => (x.status||'').toLowerCase().trim() === 'reemplazo').map(x => x.pilot).join(', ');
-      console.log(`[MATCH] ${g.date} | ${g.store} | start:${g.startMin} | cancels:${g.cancels}(${cancelPilots}) | reemplazos:${g.reemplazos}(${repPilots}) | matched:${matched} | unmatched:${unmatched}`);
-    }
-
     totalMatchedReplacements += matched;
     totalUnmatchedCancels += unmatched;
 
@@ -644,9 +637,6 @@ function reconcileShiftsMatch(shifts) {
     totalSlotsMissing += groupMissing;
     totalSlotsRequired += groupRequired;
   });
-
-  // LOG RESUMEN DIAGNÓSTICO
-  console.log(`[MATCH RESUMEN] totalRawCancels:${totalRawCancels} totalReplacements:${totalReplacements} totalMatchedReplacements:${totalMatchedReplacements} totalUnmatchedCancels:${totalUnmatchedCancels} totalSlotsMissing:${totalSlotsMissing} totalSinPiloto:${totalSinPiloto} totalNoProgramado:${totalNoProgramado}`);
 
   const cuposCoveragePct = totalSlotsRequired > 0
     ? (totalSlotsCovered / totalSlotsRequired) * 100
