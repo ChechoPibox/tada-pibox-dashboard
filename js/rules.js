@@ -541,13 +541,21 @@ function reconcileShiftsMatch(shifts) {
     // 5. No Programado
     const isNoProgramado = (st === 'no programado');
 
-    // 6. Cupo sin piloto
+    // 6. Cupo sin piloto / Vacante
+    const pName = String(s.pilot || '').trim().toLowerCase();
     const hasPilot = Boolean(
-      (s.pilot && String(s.pilot).trim() !== '' && String(s.pilot).trim() !== '—') ||
+      (s.pilot && pName !== '' && pName !== '—' && pName !== '[sin asignar]' && pName !== 'sin asignar' && pName !== 'sin piloto') ||
       (s.pilot_id && String(s.pilot_id).trim() !== '' && String(s.pilot_id).trim() !== '—') ||
       (s.phone && String(s.phone).trim() !== '' && String(s.phone).trim() !== '—')
     );
-    const isSinPiloto = (!rawSt || (!hasPilot && !isPilotCancel && !isClientCancel && !isReplacement && !isExcluded && !isNoProgramado));
+    const isSinPiloto = Boolean(
+      s.is_vacant ||
+      st === 'cupo faltante' ||
+      st === 'sin piloto' ||
+      st === 'vacante' ||
+      !rawSt ||
+      (!hasPilot && !isPilotCancel && !isClientCancel && !isReplacement && !isExcluded && !isNoProgramado)
+    );
 
     if (isPilotCancel) {
       groups[key].pilotCancels++;
@@ -634,6 +642,44 @@ function reconcileShiftsMatch(shifts) {
     ? (totalSlotsCovered / totalSlotsRequired) * 100
     : 100;
 
+  // Detección proactiva de desajustes horarios:
+  // Cancelaciones que tienen reemplazo confirmado en la misma tienda y fecha pero con hora de inicio desfasada
+  const shiftMismatches = [];
+  const storeDateBuckets = {};
+
+  Object.values(groups).forEach(g => {
+    const normSt = normalizeKeyStr(g.store);
+    const sdKey = g.date + '__' + normSt;
+    if (!storeDateBuckets[sdKey]) {
+      storeDateBuckets[sdKey] = { unmatchedGroups: [], surplusGroups: [] };
+    }
+    const unmatched = Math.max(0, g.cancels - g.reemplazos);
+    const surplus = Math.max(0, g.reemplazos - g.cancels);
+    if (unmatched > 0) storeDateBuckets[sdKey].unmatchedGroups.push(g);
+    if (surplus > 0) storeDateBuckets[sdKey].surplusGroups.push(g);
+  });
+
+  Object.values(storeDateBuckets).forEach(bucket => {
+    if (bucket.unmatchedGroups.length > 0 && bucket.surplusGroups.length > 0) {
+      bucket.unmatchedGroups.forEach(u => {
+        bucket.surplusGroups.forEach(s => {
+          const uTimeStr = typeof fmtMinutes === 'function' ? fmtMinutes(u.startMin) : `${u.startMin}`;
+          const sTimeStr = typeof fmtMinutes === 'function' ? fmtMinutes(s.startMin) : `${s.startMin}`;
+          shiftMismatches.push({
+            date: u.date,
+            store: u.store,
+            cancelStartMin: u.startMin,
+            repStartMin: s.startMin,
+            cancelStartStr: uTimeStr,
+            repStartStr: sTimeStr,
+            diffMinutes: Math.abs(u.startMin - s.startMin),
+            msg: `Desajuste horario en ${u.store} (${u.date}): cancelación a las ${uTimeStr} y reemplazo a las ${sTimeStr}. No se emparejan por diferencia de franja horaria.`
+          });
+        });
+      });
+    }
+  });
+
   return {
     groupsCount: Object.keys(groups).length,
     totalSlotsRequired,
@@ -654,6 +700,7 @@ function reconcileShiftsMatch(shifts) {
     totalExcluded,
     cuposCoveragePct,
     effectivenessPct: cuposCoveragePct,
+    shiftMismatches,
     groups
   };
 }
@@ -1094,6 +1141,7 @@ function calculateModulo1Kpis(shifts, config = (typeof APP_CONFIG !== 'undefined
     },
     cuposExcludedCount: matchResult.totalExcluded,
     cuposFaltantesTotal: matchResult.totalSlotsMissing,
+    shiftMismatches: matchResult.shiftMismatches || [],
     cuposFaltantesBreakdown: {
       unmatchedCancels: matchResult.totalUnmatchedCancels,
       unmatchedPilotCancels: matchResult.totalUnmatchedPilotCancels || 0,

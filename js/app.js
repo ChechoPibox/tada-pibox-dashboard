@@ -1731,7 +1731,14 @@ function renderKpis() {
       target: 'Objetivo: 0 vacantes',
       targetClass: kpis.cuposFaltantesTotal === 0 ? 'target-good' : 'target-bad',
       progressPct: kpis.cuposFaltantesTotal === 0 ? 100 : Math.max(8, 100 - (kpis.cuposFaltantesTotal * 8)),
-      tooltip: 'Turnos requeridos que quedaron descubiertos (cancelados sin reemplazo, sin piloto o no programados). Requieren activación de suplentes.'
+      tooltip: 'Turnos requeridos que quedaron descubiertos (cancelados sin reemplazo, sin piloto o no programados). Requieren activación de suplentes.',
+      alertHtml: (kpis.shiftMismatches && kpis.shiftMismatches.length > 0)
+        ? `<div style="margin-top:6px; font-size:0.72rem; color:#f59e0b; background:rgba(245,158,11,0.1); padding:5px 8px; border-radius:6px; border:1px solid rgba(245,158,11,0.3); line-height:1.5;">
+            <strong>⚠️ ${kpis.shiftMismatches.length} desajuste(s) horario(s):</strong><br>
+            ${kpis.shiftMismatches.slice(0, 5).map(m => `• ${escapeHtml(m.store.split(' - ')[0])}: cancela ${m.cancelStartStr} vs reemplazo ${m.repStartStr}`).join('<br>')}
+            ${kpis.shiftMismatches.length > 5 ? '<br>… y ' + (kpis.shiftMismatches.length - 5) + ' más' : ''}
+          </div>`
+        : ''
     },
     {
       label: '5. Puntualidad de Llegada',
@@ -1927,6 +1934,7 @@ function renderKpis() {
         <div class="kpi-progress-fill" style="width: ${c.progressPct.toFixed(1)}%;"></div>
       </div>`}
       <div class="kpi-sub">${c.sub}</div>
+      ${c.alertHtml || ''}
     </div>
   `).join('');
 
