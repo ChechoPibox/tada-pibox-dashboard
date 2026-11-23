@@ -610,7 +610,9 @@ function reconcileShiftsMatch(shifts) {
 
     // LOG DIAGNÓSTICO: registrar cada grupo con cancelaciones o reemplazos
     if (g.cancels > 0 || g.reemplazos > 0) {
-      console.log(`[MATCH] ${g.date} | ${g.store} | start:${g.startMin} | cancels:${g.cancels} | reemplazos:${g.reemplazos} | matched:${matched} | unmatched:${unmatched}`);
+      const cancelPilots = g.shifts.filter(x => {const xst=(x.status||'').toLowerCase(); return xst.includes('cancela');}).map(x => x.pilot).join(', ');
+      const repPilots = g.shifts.filter(x => (x.status||'').toLowerCase().trim() === 'reemplazo').map(x => x.pilot).join(', ');
+      console.log(`[MATCH] ${g.date} | ${g.store} | start:${g.startMin} | cancels:${g.cancels}(${cancelPilots}) | reemplazos:${g.reemplazos}(${repPilots}) | matched:${matched} | unmatched:${unmatched}`);
     }
 
     totalMatchedReplacements += matched;
