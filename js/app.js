@@ -2256,6 +2256,9 @@ function renderRiskTablePage() {
     return true;
   });
 
+  // Guardar en AppState para que las acciones de fila (Suplente / Liberar) operen sobre el turno exacto visualizado
+  AppState._currentFilteredRiskShifts = filtered;
+
   // Paginación
   const totalPages = Math.max(1, Math.ceil(filtered.length / RISK_PAGE_SIZE));
   AppState._riskTablePage = Math.min(AppState._riskTablePage || 1, totalPages);
@@ -3122,18 +3125,20 @@ function setupSuplentesModal() {
 }
 
 function openSuplentesModalForShift(shiftIndex) {
-  const evaluatedShifts = CoverageEngine.evaluateScheduledShiftsRisk(
-    AppState.filteredProg,
-    AppState.mallaShifts,
-    APP_CONFIG
-  );
-  evaluatedShifts.sort((a, b) => {
-    const order = { vacant: 1, high: 2, medium: 3, low: 4, unknown: 5 };
-    return (order[a.risk.level] || 9) - (order[b.risk.level] || 9);
-  });
+  // Buscar primero en la lista actualmente filtrada y renderizada en pantalla
+  let shift = null;
+  if (AppState._currentFilteredRiskShifts && AppState._currentFilteredRiskShifts[shiftIndex]) {
+    shift = AppState._currentFilteredRiskShifts[shiftIndex];
+  } else if (AppState._allEvaluatedRiskShifts && AppState._allEvaluatedRiskShifts[shiftIndex]) {
+    shift = AppState._allEvaluatedRiskShifts[shiftIndex];
+  } else if (AppState.progShifts && AppState.progShifts[shiftIndex]) {
+    shift = AppState.progShifts[shiftIndex];
+  }
 
-  const shift = evaluatedShifts[shiftIndex];
-  if (!shift) return;
+  if (!shift) {
+    console.warn('[TaDa] Turno no encontrado para índice de suplente:', shiftIndex);
+    return;
+  }
 
   renderSuplentesList(shift);
 }
@@ -3151,14 +3156,18 @@ function renderSuplentesList(targetShift) {
   const titleEl = document.getElementById('suplentesModalTitle');
   const listEl = document.getElementById('suplentesListContainer');
 
+  const startFormatted = typeof fmtMinutes === 'function' ? fmtMinutes(targetShift.start) : (targetShift.start || '');
+  const endFormatted = typeof fmtMinutes === 'function' ? fmtMinutes(targetShift.end_time || (targetShift.start + 480)) : '';
+  const dateFormatted = targetShift.date ? (typeof parseHybridDate === 'function' ? parseHybridDate(targetShift.date) : targetShift.date) : '';
+
   if (titleEl) {
     titleEl.innerHTML = `
-      Sugerencias de Suplente para: <strong>${escapeHtml(targetShift.store)}</strong><br>
-      <span style="font-size:0.8rem;color:var(--text-muted);">${targetShift.weekday || ''} ${targetShift.date || ''} a las ${fmtMinutes(targetShift.start)}</span>
+      Sugerencias de Suplente para: <strong>${escapeHtml(targetShift.store || 'Tienda')}</strong> (${escapeHtml(targetShift.city || '')})<br>
+      <span style="font-size:0.8rem;color:var(--text-muted);">${escapeHtml(targetShift.weekday || '')} ${dateFormatted} · Franja: <strong>${startFormatted} – ${endFormatted}</strong></span>
     `;
   }
 
-  // Aplicar motor con los 3 criterios y validación de conflicto de horarios
+  // Aplicar motor con validación estricta de día y franja libre y ordenamiento por mejor asistencia
   const candidates = CoverageEngine.suggestReplacements(
     targetShift,
     AppState.mallaShifts,
@@ -3168,33 +3177,44 @@ function renderSuplentesList(targetShift) {
   if (!listEl) return;
 
   if (candidates.length === 0) {
-    listEl.innerHTML = `<div style="text-align:center;padding:24px;color:var(--text-dim);">No se encontraron suplentes disponibles sin conflicto de horario en esa fecha.</div>`;
+    listEl.innerHTML = `
+      <div style="text-align:center;padding:32px;color:var(--text-dim);">
+        <div style="font-size:1.8rem;margin-bottom:8px;">⚠️</div>
+        <div style="font-size:0.95rem;font-weight:700;color:#fff;">No se encontraron suplentes disponibles</div>
+        <div style="font-size:0.8rem;color:var(--text-muted);margin-top:4px;">
+          Todos los pilotos activos en ${escapeHtml(targetShift.city || 'esta ciudad')} ya tienen turnos programados en esta fecha o no alcanzan el umbral de asistencia mínima requerida (≥80%).
+        </div>
+      </div>`;
   } else {
-    listEl.innerHTML = candidates.map(c => {
+    listEl.innerHTML = candidates.map((c, i) => {
       const cleanPhone = (c.phone || '').replace(/\D/g, '');
-      const waLink = cleanPhone ? `https://wa.me/57${cleanPhone}?text=Hola%20${encodeURIComponent(c.name)},%20te%20escribimos%20de%20operaciones%20TaDa/Pibox%20para%20confirmar%20tu%20disponibilidad%20el%20turno%20en%20${encodeURIComponent(targetShift.store)}` : null;
+      const waLink = cleanPhone ? `https://wa.me/57${cleanPhone}?text=Hola%20${encodeURIComponent(c.name)},%20te%20escribimos%20de%20operaciones%20TaDa/Pibox%20para%20confirmar%20tu%20disponibilidad%20el%20turno%20en%20${encodeURIComponent(targetShift.store)}%20(${encodeURIComponent(dateFormatted)}%20${encodeURIComponent(startFormatted)})` : null;
       const safeName = escapeHtml(c.name).replace(/'/g, "\\'");
       const safeId = escapeHtml(c.pilot_id || '').replace(/'/g, "\\'");
       const safeTel = escapeHtml(c.phone || '').replace(/'/g, "\\'");
+      const isTop1 = i === 0;
 
       return `
-        <div class="suplente-card" style="border: 1px solid rgba(139, 92, 246, 0.22); border-radius: var(--radius-md); padding: 14px; margin-bottom: 12px; background: rgba(20, 24, 54, 0.7); display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap;">
+        <div class="suplente-card" style="border: 1px solid ${isTop1 ? 'rgba(16, 185, 129, 0.4)' : 'rgba(139, 92, 246, 0.22)'}; border-radius: var(--radius-md); padding: 14px; margin-bottom: 12px; background: ${isTop1 ? 'rgba(16, 185, 129, 0.05)' : 'rgba(20, 24, 54, 0.7)'}; display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap;">
           <div style="flex: 1; min-width: 220px;">
             <div style="font-weight:700;color:#fff;font-size:0.95rem;display:flex;align-items:center;gap:8px;">
-              <span>${escapeHtml(c.name)}</span>
+              <span>${isTop1 ? '⭐ ' : ''}${escapeHtml(c.name)}</span>
               ${c.pilot_id ? `<span style="font-size:0.7rem;color:var(--text-dim);font-weight:normal;">(ID: ${escapeHtml(c.pilot_id)})</span>` : ''}
+              <span class="pill pill-good" style="font-size:0.68rem;padding:2px 8px;">${c.globalAssistPct}% Asistencia</span>
             </div>
             <div class="suplente-meta" style="display:flex;gap:10px;flex-wrap:wrap;font-size:0.77rem;color:var(--text-muted);margin-top:4px;">
+              <span>🛡️ <strong>${c.attendedShifts}</strong> turnos asistidos de ${c.evaluableCount}</span>
               <span>🏪 ${escapeHtml(c.storeInfo)}</span>
               <span>📅 ${escapeHtml(c.dayInfo)}</span>
-              <span>🛡️ Asistencia: <strong>${c.globalAssistPct}%</strong></span>
             </div>
-            ${c.sameDayNote ? `<div style="font-size:0.73rem;color:#fbbf24;margin-top:4px;">ℹ️ ${escapeHtml(c.sameDayNote)}</div>` : ''}
+            <div style="font-size:0.73rem;color:${c.sameDayStatus.includes('🟢') ? '#10b981' : '#fbbf24'};margin-top:4px;font-weight:600;">
+              ${c.sameDayStatus}
+            </div>
           </div>
           <div style="text-align:right;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
             <div style="text-align:right;margin-right:4px;">
               <div style="font-size:1.18rem;font-weight:800;color:#10b981;">${c.fitScore} pts</div>
-              <div style="font-size:0.68rem;color:var(--text-dim);">Afinidad 3 Criterios</div>
+              <div style="font-size:0.68rem;color:var(--text-dim);">Afinidad Operativa</div>
             </div>
             ${waLink ? `<a href="${waLink}" target="_blank" class="btn btn-whatsapp btn-sm" title="Contactar por WhatsApp">💬 WhatsApp</a>` : ''}
             <button type="button" class="btn btn-primary btn-sm" onclick="assignCandidateToShift('${safeName}', '${safeId}', '${safeTel}')" title="Asignar a este conductor para cubrir el turno">
@@ -3223,7 +3243,8 @@ async function assignCandidateToShift(pilotName, pilotId, phone) {
   const validation = CoverageEngine.validatePilotAvailability(
     { name: pilotName, pilot_id: pilotId },
     targetShift,
-    AppState.progShifts
+    AppState.progShifts,
+    AppState.mallaShifts
   );
 
   if (!validation.available) {
@@ -3231,12 +3252,30 @@ async function assignCandidateToShift(pilotName, pilotId, phone) {
     return;
   }
 
-  // Aplicar asignación
+  // Aplicar asignación al objeto actual
   targetShift.pilot = pilotName;
   targetShift.pilot_id = pilotId || targetShift.pilot_id || '';
   targetShift.phone = phone || targetShift.phone || '';
   targetShift.is_vacant = false;
   targetShift.status = 'Reemplazo';
+
+  // Sincronizar también con el turno correspondiente en AppState.progShifts
+  if (AppState.progShifts) {
+    const origShift = AppState.progShifts.find(ps =>
+      ps === targetShift ||
+      (ps.store === targetShift.store &&
+       ps.date === targetShift.date &&
+       ps.start === targetShift.start &&
+       (ps.pilot === targetShift.pilot || ps.is_vacant || ps.status === targetShift.status))
+    );
+    if (origShift) {
+      origShift.pilot = pilotName;
+      origShift.pilot_id = pilotId || origShift.pilot_id || '';
+      origShift.phone = phone || origShift.phone || '';
+      origShift.is_vacant = false;
+      origShift.status = 'Reemplazo';
+    }
+  }
 
   // Persistir en IndexedDB local
   try {
@@ -3256,24 +3295,23 @@ async function assignCandidateToShift(pilotName, pilotId, phone) {
   const modal = document.getElementById('modalSuplentes');
   if (modal) modal.classList.remove('active');
 
-  alert(`✅ Asignación Exitosa:\n\n${pilotName} ha sido asignado como reemplazo para ${targetShift.store} (${fmtMinutes(targetShift.start)}).`);
+  const startFmt = typeof fmtMinutes === 'function' ? fmtMinutes(targetShift.start) : targetShift.start;
+  alert(`✅ Asignación Exitosa:\n\n${pilotName} ha sido asignado como suplente para ${targetShift.store} (${startFmt}).`);
 }
 
 /**
  * Libera o cancela la asignación de un turno programado, actualizando la disponibilidad del conductor
  */
 async function cancelOrReleaseShift(shiftIndex) {
-  const evaluatedShifts = CoverageEngine.evaluateScheduledShiftsRisk(
-    AppState.filteredProg,
-    AppState.mallaShifts,
-    APP_CONFIG
-  );
-  evaluatedShifts.sort((a, b) => {
-    const order = { vacant: 1, high: 2, medium: 3, low: 4, unknown: 5 };
-    return (order[a.risk.level] || 9) - (order[b.risk.level] || 9);
-  });
+  let shift = null;
+  if (AppState._currentFilteredRiskShifts && AppState._currentFilteredRiskShifts[shiftIndex]) {
+    shift = AppState._currentFilteredRiskShifts[shiftIndex];
+  } else if (AppState._allEvaluatedRiskShifts && AppState._allEvaluatedRiskShifts[shiftIndex]) {
+    shift = AppState._allEvaluatedRiskShifts[shiftIndex];
+  } else if (AppState.progShifts && AppState.progShifts[shiftIndex]) {
+    shift = AppState.progShifts[shiftIndex];
+  }
 
-  const shift = evaluatedShifts[shiftIndex];
   if (!shift) return;
 
   const confirmMsg = confirm(`¿Deseas liberar la asignación de ${shift.pilot} en ${shift.store}?\n\nEl turno quedará marcado como vacante y el conductor quedará disponible inmediatamente para otras asignaciones sin cruce.`);
@@ -3282,6 +3320,19 @@ async function cancelOrReleaseShift(shiftIndex) {
   shift.status = 'Piloto Cancela';
   shift.is_vacant = true;
   shift.pilot = '[SIN ASIGNAR]';
+
+  // Sincronizar en AppState.progShifts
+  if (AppState.progShifts) {
+    const origShift = AppState.progShifts.find(ps =>
+      ps === shift ||
+      (ps.store === shift.store && ps.date === shift.date && ps.start === shift.start)
+    );
+    if (origShift) {
+      origShift.status = 'Piloto Cancela';
+      origShift.is_vacant = true;
+      origShift.pilot = '[SIN ASIGNAR]';
+    }
+  }
 
   try {
     if (typeof TaDaDB !== 'undefined' && TaDaDB.saveProgramacionShifts) {

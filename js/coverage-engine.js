@@ -445,32 +445,96 @@ const CoverageEngine = {
    * Valida la disponibilidad de un piloto frente a todas las tiendas y programaciones activas del sistema.
    * Retorna { available: true } o { available: false, reason, conflictingShift }
    */
-  validatePilotAvailability(pilotCandidate, targetShift, progShifts, options = {}) {
+  validatePilotAvailability(pilotCandidate, targetShift, progShifts, mallaShifts = null, options = {}) {
     if (!pilotCandidate || !targetShift) {
       return { available: false, reason: 'Parámetros de turno o piloto inválidos' };
     }
 
-    const allProg = progShifts || [];
-    for (const ps of allProg) {
-      // Ignorar el mismo turno que se intenta cubrir
-      if (ps === targetShift) continue;
+    // Excluir al mismo piloto titular asignado actualmente al turno
+    if (this.isSamePilot(pilotCandidate, targetShift)) {
+      return {
+        available: false,
+        reason: 'El conductor seleccionado es el titular actualmente asignado a este turno.'
+      };
+    }
 
-      // Solo turnos con compromiso activo (no vacantes, no cancelados)
+    const allProg = progShifts || (typeof AppState !== 'undefined' ? AppState.progShifts : []);
+    const allMalla = mallaShifts || (typeof AppState !== 'undefined' ? AppState.mallaShifts : []);
+
+    const targetDateNorm = typeof parseHybridDate === 'function' ? parseHybridDate(targetShift.date) : String(targetShift.date || '').split('T')[0];
+    const targetDay = (targetShift.weekday || '').trim().toLowerCase();
+
+    // 1. Revisar programaciones activas (progShifts)
+    for (const ps of allProg) {
+      if (ps === targetShift) continue;
       if (!this.isShiftActiveCommitment(ps)) continue;
 
-      // Verificar si es el mismo piloto
       if (this.isSamePilot(pilotCandidate, ps)) {
-        // Verificar si se cruzan en fecha y franja horaria
-        if (this.checkShiftTimeConflict(ps, targetShift, options)) {
+        const psDateNorm = typeof parseHybridDate === 'function' ? parseHybridDate(ps.date) : String(ps.date || '').split('T')[0];
+        const sameDate = Boolean(targetDateNorm && psDateNorm && targetDateNorm === psDateNorm);
+        const sameWeekday = Boolean(!targetDateNorm && targetDay && ps.weekday && ps.weekday.toLowerCase() === targetDay);
+
+        if (sameDate || sameWeekday) {
           const storeName = ps.store || 'Otra Tienda';
-          const startTime = typeof fmtMinutes === 'function' ? fmtMinutes(ps.start) : `${Math.floor(ps.start/60)}:${ps.start%60}`;
+          const startTime = typeof fmtMinutes === 'function' ? fmtMinutes(ps.start) : `${ps.start}`;
           const intPs = this.getShiftTimeInterval(ps);
           const endTime = typeof fmtMinutes === 'function' && intPs ? fmtMinutes(intPs.end % 1440) : '';
-          return {
-            available: false,
-            reason: `El piloto ya tiene un turno activo en ${storeName} (${startTime}${endTime ? ' - ' + endTime : ''}) que se cruza con este horario.`,
-            conflictingShift: ps
-          };
+
+          // Cruce horario / franja
+          if (this.checkShiftTimeConflict(ps, targetShift, options)) {
+            return {
+              available: false,
+              reason: `El piloto ya tiene un turno activo en ${storeName} (${startTime} - ${endTime}) que se cruza con este horario.`,
+              conflictingShift: ps
+            };
+          }
+
+          // Conflicto de estar programado en el día
+          if (options.requireDayFree !== false) {
+            return {
+              available: false,
+              reason: `El piloto ya está programado en ${storeName} (${startTime} - ${endTime}) en la misma fecha.`,
+              conflictingShift: ps
+            };
+          }
+        }
+      }
+    }
+
+    // 2. Revisar compromisos en malla de turnos (mallaShifts)
+    for (const ms of (allMalla || [])) {
+      if (ms === targetShift) continue;
+      if (!ms.pilot || ms.pilot === '[SIN ASIGNAR]') continue;
+
+      if (this.isSamePilot(pilotCandidate, ms)) {
+        const msDateNorm = typeof parseHybridDate === 'function' ? parseHybridDate(ms.date) : String(ms.date || '').split('T')[0];
+        const sameDate = Boolean(targetDateNorm && msDateNorm && targetDateNorm === msDateNorm);
+        const sameWeekday = Boolean(!targetDateNorm && targetDay && ms.weekday && ms.weekday.toLowerCase() === targetDay);
+
+        if (sameDate || sameWeekday) {
+          const isCommitment = ms.attended === true || (!ms.pilot_cancel && !(typeof isOperationalShiftExcluded === 'function' && isOperationalShiftExcluded(ms.status)));
+          if (isCommitment) {
+            const storeName = ms.store || 'Otra Tienda';
+            const startTime = typeof fmtMinutes === 'function' ? fmtMinutes(ms.start) : `${ms.start}`;
+            const intMs = this.getShiftTimeInterval(ms);
+            const endTime = typeof fmtMinutes === 'function' && intMs ? fmtMinutes(intMs.end % 1440) : '';
+
+            if (this.checkShiftTimeConflict(ms, targetShift, options)) {
+              return {
+                available: false,
+                reason: `El piloto ya cuenta con un turno registrado en ${storeName} (${startTime} - ${endTime}) con cruce de horario.`,
+                conflictingShift: ms
+              };
+            }
+
+            if (options.requireDayFree !== false) {
+              return {
+                available: false,
+                reason: `El piloto ya tiene un turno en ${storeName} (${startTime} - ${endTime}) en esta fecha.`,
+                conflictingShift: ms
+              };
+            }
+          }
         }
       }
     }
@@ -479,26 +543,32 @@ const CoverageEngine = {
   },
 
   /**
-   * POOL DE PILOTOS DISPONIBLES (Banca de Suplentes con los 3 Criterios Oficiales y Validación Anti-Conflicto):
+   * POOL DE PILOTOS DISPONIBLES (Banca de Suplentes de Alto Rendimiento y Validación Anti-Conflicto):
    *
-   * 1. Que haya ido a esa TIENDA frecuentemente y con buen cumplimiento.
-   * 2. Que haya tenido TURNOS SIMILARES (horario afín).
-   * 3. Que sea EFECTIVO EN ESE DÍA de la semana.
-   * + Validación entre tiendas: Excluye automáticamente a pilotos con turnos activos superpuestos.
-   * + Control de duplicidad: Garantiza que ningún piloto aparezca repetido en las sugerencias.
+   * 1. CONDICIÓN PRIMORDIAL: Pilotos NO PROGRAMADOS EN EL DÍA NI EN LA FRANJA (100% libres en la fecha).
+   * 2. CRITERIO DE ORDENAMIENTO RECTOR: MEJOR ASISTENCIA (%) comprobada de mayor a menor.
+   * 3. CRITERIOS COMPLEMENTARIOS: Experiencia en la tienda, horario afín y volumen de turnos asistidos.
    */
   suggestReplacements(targetShift, mallaShifts, progShifts, options = {}) {
     if (!targetShift) return [];
 
-    const targetCity = targetShift.city;
-    const targetStore = targetShift.store;
-    const targetDay = targetShift.weekday;
-    const targetStart = targetShift.start;
+    let targetCity = (targetShift.city || '').trim();
+    const targetStore = (targetShift.store || '').trim();
+    const targetDay = (targetShift.weekday || '').trim();
+    const targetStart = targetShift.start != null ? Number(targetShift.start) : null;
+    const targetDateNorm = typeof parseHybridDate === 'function' ? parseHybridDate(targetShift.date) : String(targetShift.date || '').split('T')[0];
 
-    // 1. Agrupar el historial de pilotos de la misma ciudad (Deduplicación estricta por ID o Nombre)
+    // Inferir ciudad si no viene explícita en targetShift
+    if (!targetCity && targetStore) {
+      const foundInProg = (progShifts || []).find(s => s.store === targetStore && s.city);
+      const foundInMalla = (mallaShifts || []).find(s => s.store === targetStore && s.city);
+      targetCity = (foundInProg?.city || foundInMalla?.city || '').trim();
+    }
+
+    // 1. Agrupar el historial operativo de pilotos de la misma ciudad
     const pilotData = {};
     (mallaShifts || []).forEach(s => {
-      if (!s.pilot) return;
+      if (!s.pilot || s.pilot === '[SIN ASIGNAR]') return;
       if (targetCity && s.city && s.city.toLowerCase() !== targetCity.toLowerCase()) return;
 
       const pKey = (s.pilot_id && s.pilot_id.trim())
@@ -510,9 +580,11 @@ const CoverageEngine = {
           name: s.pilot.trim(),
           pilot_id: (s.pilot_id || '').trim(),
           phone: (s.phone || '').trim(),
-          city: s.city,
+          city: s.city || targetCity,
           totalShifts: 0,
           attendedShifts: 0,
+          pilotCancels: 0,
+          evaluableShifts: 0,
           storeShifts: 0,
           storeAttended: 0,
           similarTimeShifts: 0,
@@ -524,102 +596,154 @@ const CoverageEngine = {
 
       const p = pilotData[pKey];
       p.totalShifts++;
-      if (s.attended) p.attendedShifts++;
+
+      const isAttended = Boolean(s.attended) || (
+        String(s.status || '').toLowerCase().trim() === 'confirmado' ||
+        String(s.status || '').toLowerCase().trim() === 'reemplazo' ||
+        String(s.status || '').toLowerCase().trim().includes('adicional')
+      );
+      const isCancel = typeof isOperationalPilotCancel === 'function' ? isOperationalPilotCancel(s) : Boolean(s.pilot_cancel);
+
+      if (isAttended) {
+        p.attendedShifts++;
+        p.evaluableShifts++;
+      } else if (isCancel) {
+        p.pilotCancels++;
+        p.evaluableShifts++;
+      }
+
       if (s.phone && !p.phone) p.phone = s.phone.trim();
       if (s.pilot_id && !p.pilot_id) p.pilot_id = s.pilot_id.trim();
 
       // Criterio 1: Frecuencia y cumplimiento en esa tienda
       if (targetStore && s.store && s.store.toLowerCase().includes(targetStore.toLowerCase().substring(0, 8))) {
         p.storeShifts++;
-        if (s.attended) p.storeAttended++;
+        if (isAttended) p.storeAttended++;
       }
 
       // Criterio 2: Turnos con horario similar (+/- 60 min)
       if (targetStart != null && s.start != null && Math.abs(s.start - targetStart) <= 60) {
         p.similarTimeShifts++;
-        if (s.attended) p.similarTimeAttended++;
+        if (isAttended) p.similarTimeAttended++;
       }
 
       // Criterio 3: Efectividad en ese día de la semana
       if (targetDay && s.weekday && s.weekday.toLowerCase() === targetDay.toLowerCase()) {
         p.dayShifts++;
-        if (s.attended) p.dayAttended++;
+        if (isAttended) p.dayAttended++;
       }
     });
 
-    // 2. Filtrar disponibles y calificar con los 3 criterios
+    // Enriquecer datos con progShifts (para teléfonos, IDs y pilotos registrados en programación)
+    (progShifts || []).forEach(ps => {
+      if (!ps.pilot || ps.is_vacant || ps.pilot === '[SIN ASIGNAR]') return;
+      if (targetCity && ps.city && ps.city.toLowerCase() !== targetCity.toLowerCase()) return;
+      const pKey = (ps.pilot_id && ps.pilot_id.trim())
+        ? `ID_${ps.pilot_id.trim().toLowerCase()}`
+        : (typeof normalizeKeyStr === 'function' ? normalizeKeyStr(ps.pilot) : ps.pilot.trim().toLowerCase());
+      if (pilotData[pKey]) {
+        if (!pilotData[pKey].phone && ps.phone) pilotData[pKey].phone = ps.phone.trim();
+        if (!pilotData[pKey].pilot_id && ps.pilot_id) pilotData[pKey].pilot_id = ps.pilot_id.trim();
+      }
+    });
+
+    // 2. Filtrar disponibles y calificar con prioridad en ASISTENCIA y CERO TURNOS EN EL DÍA
     const candidates = [];
     const seenCandidateKeys = new Set();
 
+    // Búsqueda Fase 1: Pilotos estrictamente libres en todo el día (requireDayFree: true)
     Object.values(pilotData).forEach(p => {
-      // Control de Duplicidad estricto: evita proponer al mismo conductor dos veces
       const dedupeKey = p.pilot_id ? `ID_${p.pilot_id}` : (typeof normalizeKeyStr === 'function' ? normalizeKeyStr(p.name) : p.name.toLowerCase());
       if (seenCandidateKeys.has(dedupeKey)) return;
 
-      // Validación de Disponibilidad Real frente a TODAS las programaciones del sistema
-      const availability = this.validatePilotAvailability(p, targetShift, progShifts, options);
-      if (!availability.available) {
-        // Excluido automáticamente por cruce de franja u horario en cualquier tienda
-        return;
-      }
+      // No sugerir al mismo piloto titular
+      if (this.isSamePilot(p, targetShift)) return;
 
-      // Excluir si el piloto tiene asistencia global menor al 80%
-      const globalAssist = p.totalShifts > 0 ? (p.attendedShifts / p.totalShifts) : 0;
-      if (globalAssist < 0.8) return;
+      // Asistencia mínima requerida (≥80%)
+      const evaluable = p.evaluableShifts > 0 ? p.evaluableShifts : p.totalShifts;
+      const attendancePct = evaluable > 0 ? ((p.attendedShifts / evaluable) * 100) : 0;
+      if (attendancePct < 80) return;
 
-      // Comprobar si el piloto tiene otro turno independiente ese mismo día (sin cruce horario)
-      let sameDayNote = null;
-      const targetDateNorm = typeof parseHybridDate === 'function' ? parseHybridDate(targetShift.date) : String(targetShift.date || '').split('T')[0];
-      const sameDayShift = (progShifts || []).find(ps => {
-        if (!this.isShiftActiveCommitment(ps)) return false;
-        if (!this.isSamePilot(p, ps)) return false;
-        const psDateNorm = typeof parseHybridDate === 'function' ? parseHybridDate(ps.date) : String(ps.date || '').split('T')[0];
-        return psDateNorm === targetDateNorm;
+      // Validación estricta de disponibilidad: Cero turnos en el día y sin cruce de franja
+      const availability = this.validatePilotAvailability(p, targetShift, progShifts, mallaShifts, {
+        requireDayFree: true,
+        ...options
       });
+      if (!availability.available) return;
 
-      if (sameDayShift) {
-        const intPs = this.getShiftTimeInterval(sameDayShift);
-        const startStr = typeof fmtMinutes === 'function' ? fmtMinutes(sameDayShift.start) : '';
-        const endStr = typeof fmtMinutes === 'function' && intPs ? fmtMinutes(intPs.end % 1440) : '';
-        sameDayNote = `Turno en ${sameDayShift.store || 'otra tienda'} (${startStr} - ${endStr}) sin cruce horario`;
-      }
+      // Puntuación de idoneidad técnica:
+      // - 60% peso en porcentaje de asistencia comprobada
+      // - 15% peso en volumen histórico de cumplimiento
+      // - 15% peso en conocimiento de la tienda
+      // - 10% peso en afinidad horaria
+      const scoreAssist = Math.round((attendancePct / 100) * 60);
+      let scoreVolume = p.attendedShifts >= 12 ? 15 : (p.attendedShifts >= 6 ? 10 : (p.attendedShifts >= 2 ? 5 : 0));
+      let scoreStore = p.storeShifts >= 3 ? 15 : (p.storeShifts >= 1 ? 8 : 0);
+      let scoreTime = p.similarTimeShifts >= 3 ? 10 : (p.similarTimeShifts >= 1 ? 5 : 0);
 
-      // Cálculo de Puntuación de los 3 Criterios (0 a 100):
-      // Criterio 1: Tienda frecuente (40 pts)
-      let scoreStore = 0;
-      if (p.storeShifts >= 3) scoreStore = 40;
-      else if (p.storeShifts >= 1) scoreStore = 25;
-      else scoreStore = 10;
-
-      // Criterio 2: Horario similar (30 pts)
-      let scoreTime = 0;
-      if (p.similarTimeShifts >= 3) scoreTime = 30;
-      else if (p.similarTimeShifts >= 1) scoreTime = 20;
-      else scoreTime = 10;
-
-      // Criterio 3: Efectividad en el día de la semana (30 pts)
-      let scoreDay = 0;
-      if (p.dayShifts > 0) {
-        const dayRate = p.dayAttended / p.dayShifts;
-        scoreDay = Math.round(dayRate * 30);
-      } else {
-        scoreDay = 15; // neutral
-      }
-
-      const totalFitScore = scoreStore + scoreTime + scoreDay;
+      const totalFitScore = Math.min(100, scoreAssist + scoreVolume + scoreStore + scoreTime);
 
       seenCandidateKeys.add(dedupeKey);
       candidates.push({
         ...p,
         fitScore: totalFitScore,
-        globalAssistPct: Math.round(globalAssist * 100),
-        storeInfo: `${p.storeShifts} turnos en tienda`,
-        dayInfo: `${Math.round((p.dayAttended / (p.dayShifts || 1)) * 100)}% en ${targetDay}`,
-        sameDayNote
+        globalAssistPct: +attendancePct.toFixed(1),
+        evaluableCount: evaluable,
+        storeInfo: p.storeShifts > 0 ? `Conoce la tienda (${p.storeShifts} turnos)` : 'Nueva tienda',
+        dayInfo: p.dayShifts > 0 ? `${p.dayShifts} turnos en ${targetDay}` : `Disponible en ${targetDay}`,
+        sameDayStatus: '🟢 Sin turnos en el día ni en la franja'
       });
     });
 
-    // Ordenar por afinidad descendente y retornar los mejores 6 candidatos únicos
-    return candidates.sort((a, b) => b.fitScore - a.fitScore || b.globalAssistPct - a.globalAssistPct).slice(0, 6);
+    // Búsqueda Fase 2 (Contingencia): Si no hay pilotos 100% libres todo el día, sugerir pilotos sin cruce de horario
+    if (candidates.length === 0) {
+      Object.values(pilotData).forEach(p => {
+        const dedupeKey = p.pilot_id ? `ID_${p.pilot_id}` : (typeof normalizeKeyStr === 'function' ? normalizeKeyStr(p.name) : p.name.toLowerCase());
+        if (seenCandidateKeys.has(dedupeKey)) return;
+        if (this.isSamePilot(p, targetShift)) return;
+
+        const evaluable = p.evaluableShifts > 0 ? p.evaluableShifts : p.totalShifts;
+        const attendancePct = evaluable > 0 ? ((p.attendedShifts / evaluable) * 100) : 0;
+        if (attendancePct < 80) return;
+
+        // Solo permitir sin cruce de franja horaria
+        const availability = this.validatePilotAvailability(p, targetShift, progShifts, mallaShifts, {
+          requireDayFree: false,
+          ...options
+        });
+        if (!availability.available) return;
+
+        const scoreAssist = Math.round((attendancePct / 100) * 60);
+        let scoreVolume = p.attendedShifts >= 10 ? 15 : (p.attendedShifts >= 4 ? 8 : 4);
+        let scoreStore = p.storeShifts >= 2 ? 15 : (p.storeShifts >= 1 ? 8 : 0);
+        let scoreTime = p.similarTimeShifts >= 2 ? 10 : 0;
+        const totalFitScore = Math.min(100, scoreAssist + scoreVolume + scoreStore + scoreTime);
+
+        seenCandidateKeys.add(dedupeKey);
+        candidates.push({
+          ...p,
+          fitScore: totalFitScore,
+          globalAssistPct: +attendancePct.toFixed(1),
+          evaluableCount: evaluable,
+          storeInfo: p.storeShifts > 0 ? `Conoce la tienda (${p.storeShifts} turnos)` : 'Nueva tienda',
+          dayInfo: p.dayShifts > 0 ? `${p.dayShifts} turnos en ${targetDay}` : `Disponible en ${targetDay}`,
+          sameDayStatus: '⚠️ Turno en otra franja sin cruce'
+        });
+      });
+    }
+
+    // ORDENAMIENTO PRIORITARIO:
+    // 1. Mayor porcentaje de asistencia (100% > 95% > 90%...)
+    // 2. Mayor puntuación de afinidad operativa (fitScore)
+    // 3. Mayor cantidad de turnos asistidos comprobados
+    return candidates.sort((a, b) => {
+      if (b.globalAssistPct !== a.globalAssistPct) {
+        return b.globalAssistPct - a.globalAssistPct;
+      }
+      if (b.fitScore !== a.fitScore) {
+        return b.fitScore - a.fitScore;
+      }
+      return b.attendedShifts - a.attendedShifts;
+    }).slice(0, 8);
   }
 };
