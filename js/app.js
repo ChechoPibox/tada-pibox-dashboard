@@ -694,7 +694,7 @@ async function initApp() {
     const meta = await TaDaDB.getMeta('last_sync');
 
     // Detectar caché obsoleto, incompleto o con esquema previo
-    const CACHE_VERSION = '2026-11-23-v117-sem47-malla-prog-sync';
+    const CACHE_VERSION = '2026-11-23-v118-modulo3-kpis-and-sync-fix';
     const cachedVersion = await TaDaDB.getMeta('cache_version');
     const versionMismatch = cachedVersion !== CACHE_VERSION;
     const cachedCities = new Set(cachedMalla.map(r => r.city).filter(Boolean));
@@ -1635,17 +1635,12 @@ function generatePilotsList() {
 }
 
 // ============================================================
-// REESTRUCTURACIÓN DE TARJETAS KPI (EXCLUSIVAS DEL MÓDULO 1)
+// CONSTRUCTOR CENTRALIZADO DE TARJETAS KPI (MÓDULOS 1 Y 3)
 // 9 Tarjetas Oficiales Recalibradas con Regla de Match Transversal
 // Micro-Barras de Progreso, Metas Comparativas y Tooltips
 // ============================================================
-function renderKpis() {
-  const container = document.getElementById('kpisContainer');
-  if (!container) return;
-
-  const kpis = calculateModulo1Kpis(AppState.filteredMalla, APP_CONFIG);
-  updateExecutiveHealthStrip(kpis);
-  updateTabBadges();
+function buildKpisCardsHtml(kpis) {
+  if (!kpis) return '';
 
   const effPct = kpis.asistenciaEffectivenessPct ?? 0;
   const canPct = kpis.cancellationRatePct ?? 0;
@@ -1913,7 +1908,7 @@ function renderKpis() {
     })()
   ];
 
-  container.innerHTML = cards.map(c => `
+  return cards.map(c => `
     <div class="kpi-card ${c.colorClass} ${c.isHero ? 'kpi-hero' : ''} ${c.isWide ? 'kpi-card-wide' : ''}">
       <div class="kpi-header">
         <div class="kpi-label-wrap">
@@ -1937,6 +1932,22 @@ function renderKpis() {
       ${c.alertHtml || ''}
     </div>
   `).join('');
+}
+
+// ============================================================
+// REESTRUCTURACIÓN DE TARJETAS KPI (EXCLUSIVAS DEL MÓDULO 1)
+// 9 Tarjetas Oficiales Recalibradas con Regla de Match Transversal
+// Micro-Barras de Progreso, Metas Comparativas y Tooltips
+// ============================================================
+function renderKpis() {
+  const container = document.getElementById('kpisContainer');
+  if (!container) return;
+
+  const kpis = calculateModulo1Kpis(AppState.filteredMalla, APP_CONFIG);
+  updateExecutiveHealthStrip(kpis);
+  updateTabBadges();
+
+  container.innerHTML = buildKpisCardsHtml(kpis);
 
   // Microinteracción visual fluida al actualizar cifras KPI
   if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
@@ -2480,6 +2491,15 @@ function renderModulo3Visuals() {
     if (store && s.store !== store) return false;
     return selectedWeek && isDateInRangeWithNoonCut(s.date, selectedWeek.startDate, selectedWeek.endDate);
   });
+
+  // Renderizar las 9 Tarjetas KPI Oficiales para la semana seleccionada en Módulo 3
+  const mod3KpiContainer = document.getElementById('modulo3KpisContainer');
+  if (mod3KpiContainer) {
+    const kpisMod3 = typeof calculateModulo1Kpis === 'function' ? calculateModulo1Kpis(targetMalla, APP_CONFIG) : null;
+    if (kpisMod3) {
+      mod3KpiContainer.innerHTML = buildKpisCardsHtml(kpisMod3);
+    }
+  }
 
   // 1. Tarjeta KPI: Promedio de turnos asignados por piloto en el periodo (Req 13)
   const isShiftEvaluable = s => (s.evaluable !== undefined ? Boolean(s.evaluable) : (!s.excluded && (s.attended || s.pilot_cancel)));

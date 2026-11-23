@@ -1437,7 +1437,7 @@ const RankingFlotaCriticaEngine = {
       if (s.store) pilotMap[key].stores.add(s.store);
       if (pilotMap[key].city === '—' && s.city && s.city !== '—') pilotMap[key].city = s.city;
       if (pilotMap[key].phone === '—' && s.phone && s.phone !== '—') pilotMap[key].phone = s.phone;
-      if (pilotMap[key].pilot_id === '—' && pilotId && pilotId !== '—') pilotMap[key].pilot_id = pilotId;
+      if (pilotMap[key].pilot_id === '—' && rawPilotId && rawPilotId !== '—') pilotMap[key].pilot_id = rawPilotId;
       pilotMap[key].shifts.push(s);
     });
 
