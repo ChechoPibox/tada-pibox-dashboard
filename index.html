@@ -12,7 +12,8 @@
   <meta http-equiv="X-Content-Type-Options" content="nosniff">
   <meta name="referrer" content="strict-origin-when-cross-origin">
   
-  <link rel="stylesheet" href="./css/styles.css?v=20261120_v112">
+  <link rel="stylesheet" href="./css/styles.css?v=20261124_v121">
+  <link rel="stylesheet" href="./css/drilldown.css?v=20261124_v121">
   <link rel="icon" href="./assets/logo_pibox_tada.jpg" type="image/jpeg">
 </head>
 <body>
@@ -698,14 +699,18 @@
 
         <!-- Gráfico 4: Radiografía Diaria de la Semana (Lunes a Domingo) -->
         <div class="section-panel" style="background: var(--bg-card); margin-top: 16px; margin-bottom: 0;">
-          <div class="panel-header">
+          <div class="panel-header" style="flex-wrap: wrap; gap: 10px; justify-content: space-between; align-items: center;">
             <div>
               <div class="panel-title" style="font-size: 0.95rem;">📅 Radiografía Diaria de la Semana (Lunes a Domingo)</div>
-              <div class="panel-subtitle" style="font-size: 0.78rem;">Turnos Asistidos, Reemplazos y Faltantes (Cancelaciones sin suplente) por día puntual</div>
+              <div class="panel-subtitle" style="font-size: 0.78rem;">Turnos Asistidos, Reemplazos y Faltantes (Cancelaciones sin suplente) por día puntual · <span style="color:#c4b5fd;">🔍 Haz clic en cualquier barra o fila para ver los registros del día</span></div>
             </div>
           </div>
-          <div class="chart-container" style="height: 240px;">
+          <div class="chart-container" style="height: 240px; cursor: pointer;" title="🔍 Haz clic en cualquier barra diaria para ver sus registros">
             <canvas id="chartDailyBreakdown"></canvas>
+          </div>
+          <!-- Tabla de Soporte Diario con Drill-down -->
+          <div id="containerDailyBreakdownTable" style="margin-top: 14px; overflow-x: auto; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 12px;">
+            <!-- Generado dinámicamente por ChartManager.renderWeeklyDailyBreakdownChart -->
           </div>
         </div>
 
@@ -1322,6 +1327,97 @@
 
   </main>
 
+  <!-- MODAL: DRILL-DOWN INTERACTIVO DE CONSULTA DETALLADA (TARJETAS Y TABLAS) -->
+  <div id="drilldownModalOverlay" class="drilldown-modal-overlay">
+    <div class="drilldown-modal-box">
+      <!-- Encabezado con Icono, Título y Botón Cerrar -->
+      <div class="drilldown-modal-header">
+        <div class="drilldown-header-title-wrap">
+          <div class="drilldown-icon-badge" id="drilldownModalIcon">🔍</div>
+          <div class="drilldown-header-titles">
+            <h3 id="drilldownModalTitle">Detalle de Registros Operativos</h3>
+            <p id="drilldownModalSubtitle">Trazabilidad detallada según los criterios oficiales y filtros activos</p>
+          </div>
+        </div>
+        <button id="btnDrilldownClose" class="drilldown-close-btn" title="Cerrar consulta (Esc)">✕</button>
+      </div>
+
+      <!-- Franja de Resumen Dinámico Superior -->
+      <div id="drilldownSummaryStrip" class="drilldown-summary-strip">
+        <!-- Generado dinámicamente -->
+      </div>
+
+      <!-- Filtros Desplegables Coordinados -->
+      <div class="drilldown-filters-bar">
+        <div class="drilldown-filter-group" style="max-width: 170px;">
+          <label>📅 Fecha</label>
+          <select id="ddFilterDate" class="drilldown-select">
+            <option value="">Todas las Fechas</option>
+          </select>
+        </div>
+        <div class="drilldown-filter-group" style="max-width: 150px;">
+          <label>🗓️ Día</label>
+          <select id="ddFilterDay" class="drilldown-select">
+            <option value="">Todos los Días</option>
+          </select>
+        </div>
+        <div class="drilldown-filter-group" style="max-width: 170px;">
+          <label>🏙️ Ciudad</label>
+          <select id="ddFilterCity" class="drilldown-select">
+            <option value="">Todas las Ciudades</option>
+          </select>
+        </div>
+        <div class="drilldown-filter-group">
+          <label>🏪 Tienda / Punto</label>
+          <select id="ddFilterStore" class="drilldown-select">
+            <option value="">Todas las Tiendas</option>
+          </select>
+        </div>
+        <div class="drilldown-filter-group" style="max-width: 140px;">
+          <label>⏰ Hora Turno</label>
+          <select id="ddFilterHour" class="drilldown-select">
+            <option value="">Todas las Horas</option>
+          </select>
+        </div>
+        <div>
+          <button id="btnDrilldownClear" class="drilldown-btn-clear" title="Restablecer filtros a la consulta inicial">
+            🔄 Limpiar Filtros
+          </button>
+        </div>
+      </div>
+
+      <!-- Cuerpo con Tabla de Registros -->
+      <div class="drilldown-modal-body">
+        <div class="drilldown-table-wrapper">
+          <table class="drilldown-table">
+            <thead>
+              <tr>
+                <th style="width: 40px; text-align: center;">#</th>
+                <th style="min-width: 95px;">Fecha</th>
+                <th style="min-width: 85px;">Día</th>
+                <th style="min-width: 95px;">Ciudad</th>
+                <th style="min-width: 170px;">Tienda / Punto</th>
+                <th style="min-width: 75px; text-align: center;">Hora Inicio</th>
+                <th style="min-width: 160px;">Piloto / ID</th>
+                <th style="min-width: 110px; text-align: center;">Estado Turno</th>
+                <th style="min-width: 140px; text-align: center;">Clasificación Operativa</th>
+                <th style="min-width: 110px; text-align: center;">Carga / Horas</th>
+              </tr>
+            </thead>
+            <tbody id="drilldownTableBody">
+              <!-- Renderizado dinámicamente -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Pie con Paginación -->
+      <div id="drilldownModalFooter" class="drilldown-modal-footer">
+        <!-- Renderizado dinámicamente -->
+      </div>
+    </div>
+  </div>
+
   <!-- MODAL: POOL DE SUPLENTES (3 CRITERIOS OFICIALES) -->
   <div id="modalSuplentes" class="modal-overlay">
     <div class="modal-box">
@@ -1668,8 +1764,9 @@
   <script src="./js/coverage-engine.js?v=20261124_v120"></script>
   <script src="./js/charts.js?v=20261124_v120"></script>
   <script src="./js/data.js?v=data_20261120"></script>
-  <script src="./js/llamados-service.js?v=20261124_v120"></script>
-  <script src="./js/app.js?v=20261124_v120"></script>
+  <script src="./js/drilldown.js?v=20261124_v121"></script>
+  <script src="./js/llamados-service.js?v=20261124_v121"></script>
+  <script src="./js/app.js?v=20261124_v121"></script>
 </body>
 </html>
 

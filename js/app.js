@@ -638,6 +638,9 @@ function refreshProductivityMatches(shifts) {
 
 // Inicialización
 async function initApp() {
+  if (typeof DrilldownEngine !== 'undefined') {
+    DrilldownEngine.initModalListeners();
+  }
   setupEventListeners();
   setupColumnSelector('mallaCols-btn', 'mallaCols-dropdown', 'tableMallaWrapper');
   setupInTableSearch('mallaTableSearch', 'tableMallaProductividad');
@@ -694,7 +697,7 @@ async function initApp() {
     const meta = await TaDaDB.getMeta('last_sync');
 
     // Detectar caché obsoleto, incompleto o con esquema previo
-    const CACHE_VERSION = '2026-11-24-v120-reemplazos-desempeno-ciudad-tienda';
+    const CACHE_VERSION = '2026-11-24-v121-drilldown-interactivo';
     const cachedVersion = await TaDaDB.getMeta('cache_version');
     const versionMismatch = cachedVersion !== CACHE_VERSION;
     const cachedCities = new Set(cachedMalla.map(r => r.city).filter(Boolean));
@@ -1684,6 +1687,8 @@ function buildKpisCardsHtml(kpis) {
     },
     {
       label: '2. Tasa de Cancelación',
+      clickAction: 'card_cancellations',
+      drilldownBadge: '🔍 Ver detalle de cancelaciones',
       value: fmtPct(kpis.cancellationRatePct),
       sub: (() => {
         const raw = kpis.cuposFaltantesBreakdown?.rawCancels ?? kpis.penalizedBreakdown?.totalCancels ?? kpis.penalizedBreakdown?.pilotCancel ?? 0;
@@ -1719,6 +1724,8 @@ function buildKpisCardsHtml(kpis) {
     },
     {
       label: '4. Cupos Faltantes (Vacantes)',
+      clickAction: 'card_vacancies',
+      drilldownBadge: '🔍 Ver detalle de vacantes',
       value: fmtNum(kpis.cuposFaltantesTotal, 0),
       sub: `${kpis.cuposFaltantesBreakdown.unmatchedCancels} cancelados sin reemplazo · ${kpis.cuposFaltantesBreakdown.noProgramado} no prog · ${kpis.cuposFaltantesBreakdown.sinPiloto} sin piloto`,
       icon: '⚠️',
@@ -1909,7 +1916,7 @@ function buildKpisCardsHtml(kpis) {
   ];
 
   return cards.map(c => `
-    <div class="kpi-card ${c.colorClass} ${c.isHero ? 'kpi-hero' : ''} ${c.isWide ? 'kpi-card-wide' : ''}">
+    <div class="kpi-card ${c.colorClass} ${c.isHero ? 'kpi-hero' : ''} ${c.isWide ? 'kpi-card-wide' : ''} ${c.clickAction ? 'kpi-card-interactive' : ''}" ${c.clickAction ? `onclick="handleKpiCardDrilldown('${c.clickAction}', '${escapeHtml(c.label)}', '${c.icon || '🔍'}')"` : ''}>
       <div class="kpi-header">
         <div class="kpi-label-wrap">
           <span class="kpi-label">${c.label}</span>
@@ -1929,6 +1936,7 @@ function buildKpisCardsHtml(kpis) {
         <div class="kpi-progress-fill" style="width: ${c.progressPct.toFixed(1)}%;"></div>
       </div>`}
       <div class="kpi-sub">${c.sub}</div>
+      ${c.drilldownBadge ? `<div class="kpi-drilldown-badge">${c.drilldownBadge}</div>` : ''}
       ${c.alertHtml || ''}
     </div>
   `).join('');
@@ -4505,9 +4513,12 @@ function renderModulo3StoreCoverageTable(targetShifts, precomputedStats = null) 
     const covSquareColor = st.coveragePct >= 95 ? '#10b981' : (st.coveragePct >= 85 ? '#f59e0b' : '#ef4444');
     const rowAlert = st.missing > 0 ? 'background: rgba(239, 68, 68, 0.04);' : '';
 
+    const safeStoreEnc = encodeURIComponent(st.store || '');
+    const safeCityEnc = encodeURIComponent(st.city || '');
+
     return `
-      <tr style="${rowAlert}">
-        <td><strong>${escapeHtml(st.store)}</strong></td>
+      <tr style="${rowAlert}" class="drilldown-row" onclick="handleTableStoreDrilldown(decodeURIComponent('${safeStoreEnc}'), decodeURIComponent('${safeCityEnc}'))" title="🔍 Clic para consultar los registros detallados de esta tienda">
+        <td><strong>${escapeHtml(st.store)}</strong> <span style="font-size:0.7rem;color:#a78bfa;opacity:0.75;margin-left:4px;">🔍</span></td>
         <td><span class="pill pill-neutral">${escapeHtml(st.city)}</span></td>
         <td style="text-align:center;"><strong>${st.requested}</strong></td>
         <td style="text-align:center;color:var(--text-muted);font-weight:600;">${st.confirmed}</td>
@@ -5105,10 +5116,12 @@ function renderCityStoreOperationalAnalysis(shifts, selectedCity = '') {
       const covBadgeClass = st.kpi.coveragePct >= 95 ? 'badge-emerald' : (st.kpi.coveragePct >= 85 ? 'badge-amber' : 'badge-rose');
       const covSquareColor = st.kpi.coveragePct >= 95 ? '#10b981' : (st.kpi.coveragePct >= 85 ? '#f59e0b' : '#ef4444');
       const rowAlert = st.kpi.cancelPct > 20 || st.kpi.coveragePct < 85 ? 'background: rgba(239, 68, 68, 0.04);' : '';
+      const safeStoreEnc = encodeURIComponent(st.name || '');
+      const safeCityEnc = encodeURIComponent(city || '');
 
       return `
-        <tr style="${rowAlert}">
-          <td><strong>${escapeHtml(st.name)}</strong></td>
+        <tr style="${rowAlert}" class="drilldown-row" onclick="handleCityStoreTableDrilldown('', decodeURIComponent('${safeStoreEnc}'))" title="🔍 Clic para consultar los registros detallados de ${escapeHtml(st.name)}">
+          <td><strong>${escapeHtml(st.name)}</strong> <span style="font-size:0.7rem;color:#a78bfa;opacity:0.75;margin-left:4px;">🔍</span></td>
           <td style="text-align:center;"><strong>${st.kpi.totalShifts}</strong></td>
           <td style="text-align:center;">
             <span class="table-pct-badge badge-emerald" title="Cubiertos: ${st.kpi.attended} de ${st.kpi.totalShifts}">
@@ -5226,10 +5239,11 @@ function renderCityStoreOperationalAnalysis(shifts, selectedCity = '') {
     const covBadgeClass = c.kpi.coveragePct >= 95 ? 'badge-emerald' : (c.kpi.coveragePct >= 85 ? 'badge-amber' : 'badge-rose');
     const covSquareColor = c.kpi.coveragePct >= 95 ? '#10b981' : (c.kpi.coveragePct >= 85 ? '#f59e0b' : '#ef4444');
     const rowAlert = c.kpi.cancelPct > 20 || c.kpi.coveragePct < 85 ? 'background: rgba(239, 68, 68, 0.04);' : '';
+    const safeCityEnc = encodeURIComponent(c.name || '');
 
     return `
-      <tr style="${rowAlert}">
-        <td><strong>${escapeHtml(c.name)}</strong></td>
+      <tr style="${rowAlert}" class="drilldown-row" onclick="handleCityStoreTableDrilldown(decodeURIComponent('${safeCityEnc}'), '')" title="🔍 Clic para consultar los registros detallados de ${escapeHtml(c.name)}">
+        <td><strong>${escapeHtml(c.name)}</strong> <span style="font-size:0.7rem;color:#38bdf8;opacity:0.75;margin-left:4px;">🔍</span></td>
         <td style="text-align:center;"><strong>${c.kpi.totalShifts}</strong></td>
         <td style="text-align:center;">
           <span class="table-pct-badge badge-emerald" title="Cubiertos: ${c.kpi.attended} de ${c.kpi.totalShifts}">
@@ -5637,4 +5651,72 @@ function setupIntelligenceEventListeners() {
     }
   });
 }
+
+// ============================================================
+// HANDLERS GLOBALES PARA DRILL-DOWN INTERACTIVO (TARJETAS Y TABLAS)
+// ============================================================
+
+/**
+ * Drill-down al hacer clic en las Tarjetas KPI 2 (Cancelación) o 4 (Vacantes)
+ */
+function handleKpiCardDrilldown(clickAction, cardLabel, cardIcon) {
+  if (typeof DrilldownEngine === 'undefined') return;
+
+  if (clickAction === 'card_cancellations') {
+    DrilldownEngine.openModal({
+      type: 'card_cancellations',
+      title: '🚫 Detalle de Cancelaciones Operativas',
+      subtitle: 'Registros de turnos cancelados en el periodo activo con su respectiva tienda, horario y causal',
+      icon: '🚫'
+    });
+  } else if (clickAction === 'card_vacancies') {
+    DrilldownEngine.openModal({
+      type: 'card_vacancies',
+      title: '⚠️ Detalle de Cupos Faltantes (Vacantes)',
+      subtitle: 'Turnos que quedaron descubiertos sin reemplazo efectivo en la misma tienda, fecha y franja horaria',
+      icon: '⚠️'
+    });
+  }
+}
+
+/**
+ * Drill-down al hacer clic en filas de la Tabla 1: Cobertura por Tienda
+ */
+function handleTableStoreDrilldown(storeName, cityName) {
+  if (typeof DrilldownEngine === 'undefined') return;
+
+  DrilldownEngine.openModal({
+    type: 'table_store_coverage',
+    title: `🏪 Cobertura y Faltantes — ${storeName || 'Tienda'}`,
+    subtitle: `Registros de programación, cobertura y suplencias en ${cityName ? cityName + ' · ' : ''}${storeName}`,
+    icon: '🏪',
+    options: { store: storeName, city: cityName, scope: 'modulo3' }
+  });
+}
+
+/**
+ * Drill-down al hacer clic en filas de la Tabla 3: Desempeño Operativo por Ciudad o Tienda
+ */
+function handleCityStoreTableDrilldown(cityName, storeName) {
+  if (typeof DrilldownEngine === 'undefined') return;
+
+  if (cityName) {
+    DrilldownEngine.openModal({
+      type: 'table_city_store_performance',
+      title: `🏙️ Desempeño Operativo — Ciudad ${cityName}`,
+      subtitle: `Todos los turnos programados, asistidos y reemplazos de las tiendas de ${cityName}`,
+      icon: '🏙️',
+      options: { city: cityName, scope: 'modulo3' }
+    });
+  } else if (storeName) {
+    DrilldownEngine.openModal({
+      type: 'table_city_store_performance',
+      title: `🏪 Desempeño Operativo — Tienda ${storeName.split(' - ')[0]}`,
+      subtitle: `Historial de turnos y cumplimiento operativo de ${storeName}`,
+      icon: '🏪',
+      options: { store: storeName, scope: 'modulo3' }
+    });
+  }
+}
+
 

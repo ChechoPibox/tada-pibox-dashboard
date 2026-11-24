@@ -555,9 +555,97 @@ const ChartManager = {
             ticks: { color: this.colors.textMuted, stepSize: 1 },
             beginAtZero: true
           }
+        },
+        onClick: (event, elements) => {
+          if (!elements || elements.length === 0) return;
+          const elem = elements[0];
+          const dayIndex = elem.index;
+          const selectedDay = labels[dayIndex];
+          if (typeof DrilldownEngine !== 'undefined') {
+            DrilldownEngine.openModal({
+              type: 'table_daily_radiography',
+              title: `📅 Radiografía Diaria — ${selectedDay}`,
+              subtitle: `Turnos registrados y clasificados para el ${selectedDay} de la semana analizada`,
+              icon: '🗓️',
+              options: { weekday: selectedDay, scope: 'modulo3' }
+            });
+          }
         }
       }
     });
+
+    // Renderizar tabla interactiva de soporte debajo de la gráfica
+    const tableContainer = document.getElementById('containerDailyBreakdownTable');
+    if (tableContainer) {
+      const rowsHtml = dayOrder.map(d => {
+        const item = dayMap[d];
+        const covPct = item.total > 0 ? ((item.covered / item.total) * 100).toFixed(1) : '100.0';
+        const covBadgeClass = covPct >= 95 ? 'badge-emerald' : (covPct >= 85 ? 'badge-amber' : 'badge-rose');
+        const covColor = covPct >= 95 ? '#10b981' : (covPct >= 85 ? '#f59e0b' : '#ef4444');
+
+        return `
+          <tr class="drilldown-row" onclick="DrilldownEngine.openModal({
+            type: 'table_daily_radiography',
+            title: '📅 Radiografía Diaria — ${d}',
+            subtitle: 'Turnos registrados y balance operativo del ${d}',
+            icon: '🗓️',
+            options: { weekday: '${d}', scope: 'modulo3' }
+          })" title="🔍 Clic para consultar los turnos detallados del ${d}">
+            <td><strong>${d}</strong> <span style="font-size:0.7rem;color:#c4b5fd;margin-left:4px;">🔍</span></td>
+            <td style="text-align:center;"><strong>${item.total}</strong></td>
+            <td style="text-align:center;">
+              <span class="table-pct-badge badge-emerald">
+                <span class="table-legend-square" style="background:#10b981;"></span>
+                ${item.covered}
+              </span>
+            </td>
+            <td style="text-align:center;">
+              <span class="table-pct-badge ${item.cancels > 0 ? 'badge-rose' : 'badge-muted'}">
+                <span class="table-legend-square" style="background:${item.cancels > 0 ? '#ef4444' : '#64748b'};"></span>
+                ${item.cancels}
+              </span>
+            </td>
+            <td style="text-align:center;">
+              <span class="table-pct-badge ${item.replacements > 0 ? 'badge-cyan' : 'badge-muted'}">
+                <span class="table-legend-square" style="background:${item.replacements > 0 ? '#06b6d4' : '#64748b'};"></span>
+                ${item.replacements}
+              </span>
+            </td>
+            <td style="text-align:center;">
+              <span class="table-pct-badge ${item.missing > 0 ? 'badge-rose' : 'badge-muted'}">
+                <span class="table-legend-square" style="background:${item.missing > 0 ? '#ef4444' : '#64748b'};"></span>
+                ${item.missing}
+              </span>
+            </td>
+            <td style="text-align:center;">
+              <span class="table-pct-badge ${covBadgeClass}">
+                <span class="table-legend-square" style="background:${covColor};"></span>
+                ${covPct}%
+              </span>
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      tableContainer.innerHTML = `
+        <table class="data-table" style="width:100%; min-width:700px; font-size:0.78rem; margin:0;">
+          <thead>
+            <tr>
+              <th style="text-align:left; min-width:120px;">Día</th>
+              <th style="text-align:center; min-width:85px;">Turnos Totales</th>
+              <th style="text-align:center; min-width:85px;"><span class="table-legend-square" style="background:#10b981;"></span> Cubiertos</th>
+              <th style="text-align:center; min-width:90px;"><span class="table-legend-square" style="background:#ef4444;"></span> Cancelaciones</th>
+              <th style="text-align:center; min-width:90px;"><span class="table-legend-square" style="background:#06b6d4;"></span> Reemplazos</th>
+              <th style="text-align:center; min-width:95px;"><span class="table-legend-square" style="background:#ef4444;"></span> Faltantes</th>
+              <th style="text-align:center; min-width:95px;"><span class="table-legend-square" style="background:#10b981;"></span> % Cobertura</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
+      `;
+    }
   },
 
   // ============================================================
