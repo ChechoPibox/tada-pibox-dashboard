@@ -314,72 +314,7 @@ const SheetsService = {
         mallaShifts.push(s);
       }
     });
-    // 3. Incorporar turnos de Programación (Sheet 2) no presentes en Malla consolidada
-    // (Ej. semanas operativas vigentes como Semana 47 donde Bogotá, Medellín, Bucaramanga y Santa Marta
-    // están en Programación pero aún no han sido trasladadas a Hoja 1)
-    const existingMallaKeys = new Set();
-    mallaShifts.forEach(s => {
-      const pKey = (s.pilot_id || s.pilot || '').toLowerCase().trim();
-      const stKey = (s.status || '').toLowerCase().trim();
-      const key = `${s.date}|${(s.store || '').toLowerCase()}|${s.start}|${pKey}|${stKey}`;
-      existingMallaKeys.add(key);
-    });
-
-    let addedFromProg = 0;
-    progShifts.forEach(ps => {
-      const pKey = (ps.pilot_id || ps.pilot || '').toLowerCase().trim();
-      const stKey = (ps.status || '').toLowerCase().trim();
-      const key = `${ps.date}|${(ps.store || '').toLowerCase()}|${ps.start}|${pKey}|${stKey}`;
-      if (!existingMallaKeys.has(key)) {
-        existingMallaKeys.add(key);
-
-        const classification = typeof classifyShiftStatus === 'function'
-          ? classifyShiftStatus(ps.status)
-          : { attended: false, pilotCancel: false, excluded: false, evaluable: true };
-        const prodTarget = typeof findProductivityTargetExact === 'function'
-          ? findProductivityTargetExact(ps.store, ps.weekday, ps.start)
-          : null;
-        const evalProd = typeof evaluateProductivityMatch === 'function'
-          ? evaluateProductivityMatch(0, prodTarget)
-          : null;
-
-        mallaShifts.push({
-          date: ps.date,
-          weekday: ps.weekday,
-          pilot: ps.pilot,
-          pilot_id: ps.pilot_id,
-          phone: ps.phone,
-          city: ps.city,
-          store: ps.store,
-          status: ps.status,
-          start: ps.start,
-          end_time: ps.end_time,
-          arrival: ps.arrival,
-          booking: ps.booking,
-          packages: 0,
-          cancelled_packages: 0,
-          packages_cancelled: 0,
-          cancelled: 0,
-          hours: classification.attended ? 8 : 0,
-          attended: classification.attended,
-          pilot_cancel: classification.pilotCancel,
-          excluded: classification.excluded,
-          evaluable: classification.evaluable,
-          punctual: (ps.start != null && ps.arrival != null)
-            ? (typeof isShiftPunctualWithGabela === 'function' ? isShiftPunctualWithGabela(ps.start, ps.arrival) : ps.arrival <= ps.start)
-            : null,
-          sla35: 0,
-          target_productivity: prodTarget,
-          productivity_eval: evalProd,
-          store_packages: 0,
-          low_demand: false,
-          is_vacant: ps.is_vacant
-        });
-        addedFromProg++;
-      }
-    });
-
-    console.log(`[SheetsService] Malla fusionada: ${mallaShifts.length} turnos (Cali pestaña dedicada: ${shiftsCali.length}, incorporados desde Prog: ${addedFromProg}) | Prog total: ${progShifts.length} turnos`);
+    console.log(`[SheetsService] Malla fusionada: ${mallaShifts.length} turnos (Cali pestaña dedicada: ${shiftsCali.length}) | Prog total: ${progShifts.length} turnos`);
 
     const mallaCities = new Set(mallaShifts.map(s => s.city).filter(Boolean));
     console.log(`[SheetsService] Ciudades detectadas en Malla:`, [...mallaCities]);
