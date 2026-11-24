@@ -943,7 +943,12 @@ const ChartManager = {
                 if (item.dataset.label.includes('Cancelación')) {
                   return ` Cancelaciones: ${item.raw}% (${entries[idx].cancels}/${total} turnos)`;
                 }
-                return ` Prod: ${item.raw} paq/h (${entries[idx].packages} paqs)`;
+                const repl = entries[idx].reemplazos || 0;
+                const replPct = entries[idx].attended > 0 ? ((repl / entries[idx].attended) * 100).toFixed(1) : '0.0';
+                return [
+                  ` Prod: ${item.raw} paq/h (${entries[idx].packages} paqs)`,
+                  ` Reemplazos: ${repl} turnos (${replPct}% de turnos cubiertos)`
+                ];
               }
             }
           },

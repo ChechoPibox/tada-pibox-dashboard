@@ -694,7 +694,7 @@ async function initApp() {
     const meta = await TaDaDB.getMeta('last_sync');
 
     // Detectar caché obsoleto, incompleto o con esquema previo
-    const CACHE_VERSION = '2026-11-23-v119-full-integrity-audit';
+    const CACHE_VERSION = '2026-11-24-v120-reemplazos-desempeno-ciudad-tienda';
     const cachedVersion = await TaDaDB.getMeta('cache_version');
     const versionMismatch = cachedVersion !== CACHE_VERSION;
     const cachedCities = new Set(cachedMalla.map(r => r.city).filter(Boolean));
@@ -5022,10 +5022,10 @@ function renderCityStoreOperationalAnalysis(shifts, selectedCity = '') {
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
-  const kpiPill = (label, value, colorClass) =>
+  const kpiPill = (label, value, colorClass, customStyle = '') =>
     `<span style="display:inline-flex; align-items:center; gap:5px; background:rgba(255,255,255,0.05);
       border:1px solid rgba(255,255,255,0.1); border-radius:20px; padding:3px 10px;
-      font-size:0.75rem; color:var(--text-secondary); white-space:nowrap;">
+      font-size:0.75rem; color:var(--text-secondary); white-space:nowrap; ${customStyle}">
       <span style="color:${colorClass}; font-weight:700;">${value}</span>
       <span style="color:var(--text-muted);">${label}</span>
     </span>`;
@@ -5038,34 +5038,172 @@ function renderCityStoreOperationalAnalysis(shifts, selectedCity = '') {
       ${sub ? `<div style="font-size:0.68rem; color:var(--text-muted); margin-top:2px;">${sub}</div>` : ''}
     </div>`;
 
+  const getDependenceBadge = (pct) => {
+    if (pct > 20) {
+      return '<span class="pill pill-danger" style="font-size:0.68rem; padding:2px 8px; font-weight:700;">Alta (>20%)</span>';
+    }
+    if (pct >= 10) {
+      return '<span class="pill pill-warning" style="font-size:0.68rem; padding:2px 8px; font-weight:700;">Media (10-20%)</span>';
+    }
+    return '<span class="pill pill-success" style="font-size:0.68rem; padding:2px 8px; font-weight:700;">Baja (&lt;10%)</span>';
+  };
+
+  const renderLegendBlock = () => `
+    <div style="margin-top:12px; padding:12px 14px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); border-radius:8px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; flex-wrap:wrap; gap:6px;">
+        <span style="font-size:0.72rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em;">
+          📖 Leyenda de Indicadores — Desempeño Operativo por Ciudad y Tienda
+        </span>
+        <span style="font-size:0.68rem; color:var(--text-dim);">Fórmulas y Criterios Oficiales</span>
+      </div>
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap:12px; font-size:0.73rem; color:var(--text-secondary); line-height:1.4;">
+        <div>
+          <div style="display:inline-flex; align-items:center; gap:6px; font-weight:700; color:#34d399; margin-bottom:2px;">
+            <span class="table-legend-square" style="background:#10b981;"></span> Cobertura de Asistencia (%)
+          </div>
+          <div style="color:var(--text-muted); font-size:0.7rem;">
+            <code>(Turnos Cubiertos ÷ Solicitados) × 100</code>. Meta: ≥95%. Proporción de la demanda requerida cubierta efectivamente por conductores.
+          </div>
+        </div>
+        <div>
+          <div style="display:inline-flex; align-items:center; gap:6px; font-weight:700; color:#f87171; margin-bottom:2px;">
+            <span class="table-legend-square" style="background:#ef4444;"></span> Tasa de Cancelación (%)
+          </div>
+          <div style="color:var(--text-muted); font-size:0.7rem;">
+            <code>(Cancelaciones Piloto ÷ Solicitados) × 100</code>. Tolerancia: ≤5%. Turnos cancelados por causas atribuibles al conductor.
+          </div>
+        </div>
+        <div>
+          <div style="display:inline-flex; align-items:center; gap:6px; font-weight:700; color:#22d3ee; margin-bottom:2px;">
+            <span class="table-legend-square" style="background:#06b6d4;"></span> Reemplazos (Cantidad y %)
+          </div>
+          <div style="color:var(--text-muted); font-size:0.7rem;">
+            <code>(Reemplazos ÷ Turnos Cubiertos) × 100</code>. Total de turnos asumidos por suplentes y su porcentaje sobre los turnos asistidos/cubiertos. Refleja la dependencia hacia la flota de respaldo.
+          </div>
+        </div>
+        <div>
+          <div style="display:inline-flex; align-items:center; gap:6px; font-weight:700; color:#fbbf24; margin-bottom:2px;">
+            <span class="table-legend-square" style="background:#f59e0b;"></span> Productividad (paq/h)
+          </div>
+          <div style="color:var(--text-muted); font-size:0.7rem;">
+            <code>Paquetes Entregados ÷ Horas Asistidas</code>. Meta: ≥1.50 paq/h. Ritmo operativo de entregas por cada hora asistida en ruta.
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
   // ── MODO TIENDA ───────────────────────────────────────────────────────────
   if (data.mode === 'store') {
-    const { selectedCity: city, globalCityKpi: gk, bestStore, worstStore, worstCanc, avgProd, storeCount, findings } = data;
+    const { selectedCity: city, globalCityKpi: gk, stores, bestStore, worstStore, worstCanc, topReplaceStore, avgProd, storeCount, findings } = data;
 
     const covColor  = gk.coveragePct >= 90 ? '#34d399' : gk.coveragePct >= 80 ? '#fbbf24' : '#f87171';
     const cancColor = gk.cancelPct <= 10 ? '#34d399' : gk.cancelPct <= 20 ? '#fbbf24' : '#f87171';
     const prodColor = gk.prodPaqH >= 1.5 ? '#34d399' : gk.prodPaqH >= 0.8 ? '#fbbf24' : '#f87171';
 
+    const tableRowsHtml = stores.map(st => {
+      const covBadgeClass = st.kpi.coveragePct >= 95 ? 'badge-emerald' : (st.kpi.coveragePct >= 85 ? 'badge-amber' : 'badge-rose');
+      const covSquareColor = st.kpi.coveragePct >= 95 ? '#10b981' : (st.kpi.coveragePct >= 85 ? '#f59e0b' : '#ef4444');
+      const rowAlert = st.kpi.cancelPct > 20 || st.kpi.coveragePct < 85 ? 'background: rgba(239, 68, 68, 0.04);' : '';
+
+      return `
+        <tr style="${rowAlert}">
+          <td><strong>${escapeHtml(st.name)}</strong></td>
+          <td style="text-align:center;"><strong>${st.kpi.totalShifts}</strong></td>
+          <td style="text-align:center;">
+            <span class="table-pct-badge badge-emerald" title="Cubiertos: ${st.kpi.attended} de ${st.kpi.totalShifts}">
+              <span class="table-legend-square" style="background:#10b981;"></span>
+              ${st.kpi.attended}
+            </span>
+          </td>
+          <td style="text-align:center;">
+            <span class="table-pct-badge ${st.kpi.cancels > 0 ? 'badge-rose' : 'badge-muted'}" title="Cancelaciones: ${st.kpi.cancels} (${st.kpi.cancelPct}%)">
+              <span class="table-legend-square" style="background:${st.kpi.cancels > 0 ? '#ef4444' : '#64748b'};"></span>
+              ${st.kpi.cancels} <span style="font-size:0.7rem; opacity:0.85;">(${st.kpi.cancelPct}%)</span>
+            </span>
+          </td>
+          <!-- REEMPLAZOS: Cantidad y Porcentaje -->
+          <td style="text-align:center;">
+            <span class="table-pct-badge ${st.kpi.reemplazos > 0 ? 'badge-cyan' : 'badge-muted'}" style="${st.kpi.reemplazos > 0 ? 'background:rgba(6,182,212,0.12); border:1px solid rgba(6,182,212,0.35); color:#22d3ee;' : ''}" title="Reemplazos: ${st.kpi.reemplazos} turnos de ${st.kpi.attended} cubiertos (${st.kpi.replacePct}%)">
+              <span class="table-legend-square" style="background:${st.kpi.reemplazos > 0 ? '#06b6d4' : '#64748b'};"></span>
+              <strong>${st.kpi.reemplazos}</strong> <span style="font-size:0.72rem; opacity:0.9;">(${st.kpi.replacePct}%)</span>
+            </span>
+          </td>
+          <td style="text-align:center;">
+            <span class="table-pct-badge ${covBadgeClass}" title="Cobertura: ${st.kpi.coveragePct}%">
+              <span class="table-legend-square" style="background:${covSquareColor};"></span>
+              ${st.kpi.coveragePct}%
+            </span>
+          </td>
+          <td style="text-align:center; font-weight:700; color:#fbbf24;">
+            ${st.kpi.prodPaqH} <span style="font-size:0.68rem; color:var(--text-muted); font-weight:400;">p/h</span>
+          </td>
+          <td style="text-align:center;">
+            ${getDependenceBadge(st.kpi.replacePct)}
+          </td>
+        </tr>
+      `;
+    }).join('');
+
     container.innerHTML = `
       <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
-        <span style="font-size:0.82rem; font-weight:700; color:#a78bfa;">🏪 Análisis por Tienda — ${escapeHtml(city)}</span>
+        <span style="font-size:0.82rem; font-weight:700; color:#a78bfa;">🏪 Desempeño Operativo por Tienda — ${escapeHtml(city)}</span>
         <span style="font-size:0.72rem; color:var(--text-muted);">${storeCount} tiendas con actividad en el periodo</span>
         <div style="display:flex; gap:6px; flex-wrap:wrap; margin-left:auto;">
           ${kpiPill('cobertura', gk.coveragePct + '%', covColor)}
           ${kpiPill('cancelac.', gk.cancelPct + '%', cancColor)}
           ${kpiPill('prod. promedio', avgProd + ' paq/h', prodColor)}
-          ${kpiPill('reemplazos', gk.replacePct + '%', 'var(--text-muted)')}
+          ${kpiPill('reemplazos', `${gk.reemplazos} (${gk.replacePct}%)`, '#22d3ee', 'background:rgba(6,182,212,0.1); border-color:rgba(6,182,212,0.25);')}
         </div>
       </div>
       <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap:10px; margin-bottom:14px;">
         ${bestStore  ? statBlock('🥇', 'Mayor Productividad',    escapeHtml(bestStore.name),  `${bestStore.kpi.prodPaqH} paq/h · ${bestStore.kpi.coveragePct}% cob.`) : ''}
         ${worstStore ? statBlock('⚠️', 'Menor Cobertura',         escapeHtml(worstStore.name), `${worstStore.kpi.coveragePct}% cob. · ${worstStore.kpi.packages} pedidos`) : ''}
         ${worstCanc  ? statBlock('🔴', 'Mayor Cancelación',       escapeHtml(worstCanc.name),  `${worstCanc.kpi.cancelPct}% tasa cancela.`) : ''}
+        ${topReplaceStore ? statBlock('🔄', 'Mayor Dependencia Reemplazos', escapeHtml(topReplaceStore.name), `${topReplaceStore.kpi.reemplazos} repl. (${topReplaceStore.kpi.replacePct}%)`) : ''}
         ${statBlock('📦', 'Pedidos Totales', gk.packages.toLocaleString(), `${gk.hours.toFixed(0)}h operativas · ${storeCount} tiendas`)}
       </div>
-      <div style="border-top:1px solid rgba(255,255,255,0.05); padding-top:10px;">
-        <div style="font-size:0.72rem; font-weight:700; color:var(--text-muted); letter-spacing:0.05em; margin-bottom:8px; text-transform:uppercase;">💡 Hallazgos y Recomendaciones</div>
-        <div style="display:flex; flex-direction:column; gap:5px;">
+
+      <!-- TABLA DETALLE DESEMPEÑO POR TIENDA -->
+      <div style="margin-top:14px; overflow-x:auto; border:1px solid rgba(255,255,255,0.08); border-radius:8px;">
+        <table class="data-table" style="width:100%; min-width:820px; font-size:0.8rem; margin:0;">
+          <thead>
+            <tr>
+              <th style="text-align:left; min-width:180px;">Tienda / Punto</th>
+              <th style="text-align:center; min-width:85px;">Turnos Prog.</th>
+              <th style="text-align:center; min-width:85px;"><span class="table-legend-square" style="background:#10b981;"></span> Cubiertos</th>
+              <th style="text-align:center; min-width:95px;"><span class="table-legend-square" style="background:#ef4444;"></span> Cancelaciones</th>
+              <th style="text-align:center; min-width:130px;"><span class="table-legend-square" style="background:#06b6d4;"></span> Reemplazos (Cant. y %)</th>
+              <th style="text-align:center; min-width:95px;"><span class="table-legend-square" style="background:#10b981;"></span> % Cobertura</th>
+              <th style="text-align:center; min-width:95px;"><span class="table-legend-square" style="background:#f59e0b;"></span> Prod. (paq/h)</th>
+              <th style="text-align:center; min-width:105px;">Dependencia</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tableRowsHtml}
+          </tbody>
+          <tfoot>
+            <tr style="background:rgba(255,255,255,0.04); font-weight:700; border-top:1px solid rgba(255,255,255,0.12);">
+              <td>TOTAL CONSOLIDADO (${escapeHtml(city)})</td>
+              <td style="text-align:center;">${gk.totalShifts}</td>
+              <td style="text-align:center; color:#34d399;">${gk.attended}</td>
+              <td style="text-align:center; color:#f87171;">${gk.cancels} (${gk.cancelPct}%)</td>
+              <td style="text-align:center; color:#22d3ee;">${gk.reemplazos} (${gk.replacePct}%)</td>
+              <td style="text-align:center; color:${covColor};">${gk.coveragePct}%</td>
+              <td style="text-align:center; color:#fbbf24;">${gk.prodPaqH} p/h</td>
+              <td style="text-align:center;">${getDependenceBadge(gk.replacePct)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <!-- LEYENDA DE INDICADORES -->
+      ${renderLegendBlock()}
+
+      <!-- HALLAZGOS Y RECOMENDACIONES -->
+      <div style="border-top:1px solid rgba(255,255,255,0.06); padding-top:12px; margin-top:12px;">
+        <div style="font-size:0.72rem; font-weight:700; color:var(--text-muted); letter-spacing:0.05em; margin-bottom:8px; text-transform:uppercase;">💡 Hallazgos y Recomendaciones Operativas</div>
+        <div style="display:flex; flex-direction:column; gap:6px;">
           ${findings.map(f => `
             <div style="display:flex; gap:8px; font-size:0.78rem; color:var(--text-secondary); line-height:1.5;">
               <span style="flex-shrink:0;">${f.icon}</span>
@@ -5078,32 +5216,115 @@ function renderCityStoreOperationalAnalysis(shifts, selectedCity = '') {
   }
 
   // ── MODO CIUDAD ───────────────────────────────────────────────────────────
-  const { globalKpi: gk, cities, bestCity, alertCity, highCancCity, avgProd, cityCount, findings } = data;
+  const { globalKpi: gk, cities, bestCity, alertCity, highCancCity, topReplaceCity, avgProd, cityCount, findings } = data;
 
   const covColor  = gk.coveragePct >= 90 ? '#34d399' : gk.coveragePct >= 80 ? '#fbbf24' : '#f87171';
   const cancColor = gk.cancelPct <= 10 ? '#34d399' : gk.cancelPct <= 20 ? '#fbbf24' : '#f87171';
   const prodColor = gk.prodPaqH >= 1.5 ? '#34d399' : gk.prodPaqH >= 0.8 ? '#fbbf24' : '#f87171';
 
+  const tableRowsHtml = cities.map(c => {
+    const covBadgeClass = c.kpi.coveragePct >= 95 ? 'badge-emerald' : (c.kpi.coveragePct >= 85 ? 'badge-amber' : 'badge-rose');
+    const covSquareColor = c.kpi.coveragePct >= 95 ? '#10b981' : (c.kpi.coveragePct >= 85 ? '#f59e0b' : '#ef4444');
+    const rowAlert = c.kpi.cancelPct > 20 || c.kpi.coveragePct < 85 ? 'background: rgba(239, 68, 68, 0.04);' : '';
+
+    return `
+      <tr style="${rowAlert}">
+        <td><strong>${escapeHtml(c.name)}</strong></td>
+        <td style="text-align:center;"><strong>${c.kpi.totalShifts}</strong></td>
+        <td style="text-align:center;">
+          <span class="table-pct-badge badge-emerald" title="Cubiertos: ${c.kpi.attended} de ${c.kpi.totalShifts}">
+            <span class="table-legend-square" style="background:#10b981;"></span>
+            ${c.kpi.attended}
+          </span>
+        </td>
+        <td style="text-align:center;">
+          <span class="table-pct-badge ${c.kpi.cancels > 0 ? 'badge-rose' : 'badge-muted'}" title="Cancelaciones: ${c.kpi.cancels} (${c.kpi.cancelPct}%)">
+            <span class="table-legend-square" style="background:${c.kpi.cancels > 0 ? '#ef4444' : '#64748b'};"></span>
+            ${c.kpi.cancels} <span style="font-size:0.7rem; opacity:0.85;">(${c.kpi.cancelPct}%)</span>
+          </span>
+        </td>
+        <!-- REEMPLAZOS: Cantidad y Porcentaje -->
+        <td style="text-align:center;">
+          <span class="table-pct-badge ${c.kpi.reemplazos > 0 ? 'badge-cyan' : 'badge-muted'}" style="${c.kpi.reemplazos > 0 ? 'background:rgba(6,182,212,0.12); border:1px solid rgba(6,182,212,0.35); color:#22d3ee;' : ''}" title="Reemplazos: ${c.kpi.reemplazos} turnos de ${c.kpi.attended} cubiertos (${c.kpi.replacePct}%)">
+            <span class="table-legend-square" style="background:${c.kpi.reemplazos > 0 ? '#06b6d4' : '#64748b'};"></span>
+            <strong>${c.kpi.reemplazos}</strong> <span style="font-size:0.72rem; opacity:0.9;">(${c.kpi.replacePct}%)</span>
+          </span>
+        </td>
+        <td style="text-align:center;">
+          <span class="table-pct-badge ${covBadgeClass}" title="Cobertura: ${c.kpi.coveragePct}%">
+            <span class="table-legend-square" style="background:${covSquareColor};"></span>
+            ${c.kpi.coveragePct}%
+          </span>
+        </td>
+        <td style="text-align:center; font-weight:700; color:#fbbf24;">
+          ${c.kpi.prodPaqH} <span style="font-size:0.68rem; color:var(--text-muted); font-weight:400;">p/h</span>
+        </td>
+        <td style="text-align:center;">
+          ${getDependenceBadge(c.kpi.replacePct)}
+        </td>
+      </tr>
+    `;
+  }).join('');
+
   container.innerHTML = `
     <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
-      <span style="font-size:0.82rem; font-weight:700; color:#38bdf8;">🏙️ Análisis General — Todas las Ciudades</span>
+      <span style="font-size:0.82rem; font-weight:700; color:#38bdf8;">🏙️ Desempeño Operativo General — Todas las Ciudades</span>
       <span style="font-size:0.72rem; color:var(--text-muted);">${cityCount} ciudades con actividad en el periodo</span>
       <div style="display:flex; gap:6px; flex-wrap:wrap; margin-left:auto;">
         ${kpiPill('cobertura', gk.coveragePct + '%', covColor)}
         ${kpiPill('cancelac.', gk.cancelPct + '%', cancColor)}
         ${kpiPill('prod. promedio', avgProd + ' paq/h', prodColor)}
-        ${kpiPill('reemplazos', gk.replacePct + '%', 'var(--text-muted)')}
+        ${kpiPill('reemplazos', `${gk.reemplazos} (${gk.replacePct}%)`, '#22d3ee', 'background:rgba(6,182,212,0.1); border-color:rgba(6,182,212,0.25);')}
       </div>
     </div>
     <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap:10px; margin-bottom:14px;">
       ${bestCity    ? statBlock('🥇', 'Mayor Productividad',    escapeHtml(bestCity.name),    `${bestCity.kpi.prodPaqH} paq/h · ${bestCity.kpi.coveragePct}% cob.`) : ''}
       ${alertCity   ? statBlock('⚠️', 'Menor Cobertura',         escapeHtml(alertCity.name),   `${alertCity.kpi.coveragePct}% cob. · ${alertCity.kpi.cancelPct}% cancela.`) : ''}
       ${highCancCity ? statBlock('🔴', 'Mayor Cancelación',      escapeHtml(highCancCity.name), `${highCancCity.kpi.cancelPct}% tasa cancela.`) : ''}
+      ${topReplaceCity ? statBlock('🔄', 'Mayor Dependencia Reemplazos', escapeHtml(topReplaceCity.name), `${topReplaceCity.kpi.reemplazos} repl. (${topReplaceCity.kpi.replacePct}%)`) : ''}
       ${statBlock('📦', 'Pedidos Totales', gk.packages.toLocaleString(), `${gk.hours.toFixed(0)}h operativas · ${cityCount} ciudades`)}
     </div>
-    <div style="border-top:1px solid rgba(255,255,255,0.05); padding-top:10px;">
-      <div style="font-size:0.72rem; font-weight:700; color:var(--text-muted); letter-spacing:0.05em; margin-bottom:8px; text-transform:uppercase;">💡 Hallazgos y Recomendaciones</div>
-      <div style="display:flex; flex-direction:column; gap:5px;">
+
+    <!-- TABLA DETALLE DESEMPEÑO POR CIUDAD -->
+    <div style="margin-top:14px; overflow-x:auto; border:1px solid rgba(255,255,255,0.08); border-radius:8px;">
+      <table class="data-table" style="width:100%; min-width:820px; font-size:0.8rem; margin:0;">
+        <thead>
+          <tr>
+            <th style="text-align:left; min-width:180px;">Ciudad</th>
+            <th style="text-align:center; min-width:85px;">Turnos Prog.</th>
+            <th style="text-align:center; min-width:85px;"><span class="table-legend-square" style="background:#10b981;"></span> Cubiertos</th>
+            <th style="text-align:center; min-width:95px;"><span class="table-legend-square" style="background:#ef4444;"></span> Cancelaciones</th>
+            <th style="text-align:center; min-width:130px;"><span class="table-legend-square" style="background:#06b6d4;"></span> Reemplazos (Cant. y %)</th>
+            <th style="text-align:center; min-width:95px;"><span class="table-legend-square" style="background:#10b981;"></span> % Cobertura</th>
+            <th style="text-align:center; min-width:95px;"><span class="table-legend-square" style="background:#f59e0b;"></span> Prod. (paq/h)</th>
+            <th style="text-align:center; min-width:105px;">Dependencia</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${tableRowsHtml}
+        </tbody>
+        <tfoot>
+          <tr style="background:rgba(255,255,255,0.04); font-weight:700; border-top:1px solid rgba(255,255,255,0.12);">
+            <td>TOTAL CONSOLIDADO NACIONAL</td>
+            <td style="text-align:center;">${gk.totalShifts}</td>
+            <td style="text-align:center; color:#34d399;">${gk.attended}</td>
+            <td style="text-align:center; color:#f87171;">${gk.cancels} (${gk.cancelPct}%)</td>
+            <td style="text-align:center; color:#22d3ee;">${gk.reemplazos} (${gk.replacePct}%)</td>
+            <td style="text-align:center; color:${covColor};">${gk.coveragePct}%</td>
+            <td style="text-align:center; color:#fbbf24;">${gk.prodPaqH} p/h</td>
+            <td style="text-align:center;">${getDependenceBadge(gk.replacePct)}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+
+    <!-- LEYENDA DE INDICADORES -->
+    ${renderLegendBlock()}
+
+    <!-- HALLAZGOS Y RECOMENDACIONES -->
+    <div style="border-top:1px solid rgba(255,255,255,0.06); padding-top:12px; margin-top:12px;">
+      <div style="font-size:0.72rem; font-weight:700; color:var(--text-muted); letter-spacing:0.05em; margin-bottom:8px; text-transform:uppercase;">💡 Hallazgos y Recomendaciones Operativas</div>
+      <div style="display:flex; flex-direction:column; gap:6px;">
         ${findings.map(f => `
           <div style="display:flex; gap:8px; font-size:0.78rem; color:var(--text-secondary); line-height:1.5;">
             <span style="flex-shrink:0;">${f.icon}</span>
@@ -5113,6 +5334,7 @@ function renderCityStoreOperationalAnalysis(shifts, selectedCity = '') {
     </div>
   `;
 }
+
 
 // ============================================================
 // INTEGRACIÓN DEL CENTRO DE INTELIGENCIA OPERATIVA (FASE 2)

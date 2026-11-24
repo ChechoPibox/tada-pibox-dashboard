@@ -2175,10 +2175,12 @@ const Modulo3IntelligenceEngine = {
       const byProd    = stores.slice().sort((a, b) => b.kpi.prodPaqH - a.kpi.prodPaqH);
       const byCovLow  = stores.slice().sort((a, b) => a.kpi.coveragePct - b.kpi.coveragePct);
       const byCancHi  = stores.slice().sort((a, b) => b.kpi.cancelPct  - a.kpi.cancelPct);
+      const byReplHi  = stores.slice().sort((a, b) => b.kpi.reemplazos - a.kpi.reemplazos || b.kpi.replacePct - a.kpi.replacePct);
 
-      const bestStore  = byProd[0];
-      const worstStore = byCovLow[0];
-      const worstCanc  = byCancHi[0];
+      const bestStore       = byProd[0];
+      const worstStore      = byCovLow[0];
+      const worstCanc       = byCancHi[0];
+      const topReplaceStore = byReplHi[0];
 
       const avgProd    = stores.length > 0
         ? +(stores.reduce((a, s) => a + s.kpi.prodPaqH, 0) / stores.length).toFixed(2) : 0;
@@ -2202,8 +2204,16 @@ const Modulo3IntelligenceEngine = {
         }
       }
 
-      if (globalCityKpi.replacePct > 25) {
-        findings.push({ icon: '🔄', text: `Alta dependencia de reemplazos (${globalCityKpi.replacePct}% de turnos cubiertos por suplentes). Evaluar estabilidad de planta.` });
+      if (globalCityKpi.replacePct > 20) {
+        findings.push({ icon: '🔄', text: `Alta dependencia de reemplazos en ${selectedCity}: ${globalCityKpi.reemplazos} turnos cubiertos por suplentes (${globalCityKpi.replacePct}% de los turnos cubiertos). Evaluar estabilidad y ausentismo de la planta titular.` });
+      } else if (globalCityKpi.replacePct > 10) {
+        findings.push({ icon: '🔄', text: `Uso moderado de suplencias en ${selectedCity}: ${globalCityKpi.reemplazos} reemplazos (${globalCityKpi.replacePct}% de turnos cubiertos). Operación dentro del rango controlado.` });
+      } else if (globalCityKpi.attended > 0) {
+        findings.push({ icon: '🛡️', text: `Alta estabilidad de planta en ${selectedCity}: solo ${globalCityKpi.reemplazos} reemplazos (${globalCityKpi.replacePct}% de turnos cubiertos). Mínima dependencia de suplencias.` });
+      }
+
+      if (topReplaceStore && topReplaceStore.kpi.reemplazos > 0) {
+        findings.push({ icon: '🏪', text: `Punto con mayor volumen de suplencias: ${topReplaceStore.name} registra ${topReplaceStore.kpi.reemplazos} reemplazos (${topReplaceStore.kpi.replacePct}% de su asistencia).` });
       }
 
       if (findings.length === 0) {
@@ -2218,6 +2228,7 @@ const Modulo3IntelligenceEngine = {
         bestStore,
         worstStore,
         worstCanc,
+        topReplaceStore,
         avgProd,
         storeCount: stores.length,
         findings
@@ -2242,14 +2253,16 @@ const Modulo3IntelligenceEngine = {
     const globalKpi = computeGroupKpis(shifts);
 
     // Rankings ciudades
-    const byProd   = cities.slice().sort((a, b) => b.kpi.prodPaqH    - a.kpi.prodPaqH);
-    const byCov    = cities.slice().sort((a, b) => b.kpi.coveragePct - a.kpi.coveragePct);
-    const byCovLow = cities.slice().sort((a, b) => a.kpi.coveragePct - b.kpi.coveragePct);
-    const byCancHi = cities.slice().sort((a, b) => b.kpi.cancelPct   - a.kpi.cancelPct);
+    const byProd    = cities.slice().sort((a, b) => b.kpi.prodPaqH    - a.kpi.prodPaqH);
+    const byCov     = cities.slice().sort((a, b) => b.kpi.coveragePct - a.kpi.coveragePct);
+    const byCovLow  = cities.slice().sort((a, b) => a.kpi.coveragePct - b.kpi.coveragePct);
+    const byCancHi  = cities.slice().sort((a, b) => b.kpi.cancelPct   - a.kpi.cancelPct);
+    const byReplHi  = cities.slice().sort((a, b) => b.kpi.reemplazos  - a.kpi.reemplazos || b.kpi.replacePct - a.kpi.replacePct);
 
-    const bestCity    = byProd[0];
-    const alertCity   = byCovLow[0];
-    const highCancCity = byCancHi[0];
+    const bestCity       = byProd[0];
+    const alertCity      = byCovLow[0];
+    const highCancCity   = byCancHi[0];
+    const topReplaceCity = byReplHi[0];
 
     const avgProd = cities.length > 0
       ? +(cities.reduce((a, c) => a + c.kpi.prodPaqH, 0) / cities.length).toFixed(2) : 0;
@@ -2277,8 +2290,16 @@ const Modulo3IntelligenceEngine = {
       }
     }
 
-    if (globalKpi.replacePct > 20) {
-      findings.push({ icon: '🔄', text: `${globalKpi.replacePct}% de turnos cubiertos por reemplazos a nivel general. Alta rotación o ausentismo en la operación.` });
+    if (globalKpi.replacePct > 15) {
+      findings.push({ icon: '🔄', text: `Dependencia operativa global de reemplazos: ${globalKpi.reemplazos} turnos cubiertos por suplentes (${globalKpi.replacePct}% a nivel nacional). Alta rotación o ausentismo en la operación.` });
+    } else if (globalKpi.replacePct > 8) {
+      findings.push({ icon: '🔄', text: `Uso controlado de reemplazos: ${globalKpi.reemplazos} turnos suplidos a nivel nacional (${globalKpi.replacePct}% del total asistido). Margen adecuado de soporte.` });
+    } else if (globalKpi.attended > 0) {
+      findings.push({ icon: '🛡️', text: `Sólida estabilidad de planta nacional: solo ${globalKpi.reemplazos} turnos cubiertos por reemplazos (${globalKpi.replacePct}% del total asistido).` });
+    }
+
+    if (topReplaceCity && topReplaceCity.kpi.reemplazos > 0) {
+      findings.push({ icon: '🏙️', text: `Ciudad con mayor volumen de reemplazos: ${topReplaceCity.name} lidera con ${topReplaceCity.kpi.reemplazos} suplencias (${topReplaceCity.kpi.replacePct}% de sus turnos cubiertos).` });
     }
 
     if (findings.length === 0) {
@@ -2293,6 +2314,7 @@ const Modulo3IntelligenceEngine = {
       bestCity,
       alertCity,
       highCancCity,
+      topReplaceCity,
       avgProd,
       cityCount: cities.length,
       findings
