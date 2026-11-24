@@ -12,18 +12,86 @@
   <meta http-equiv="X-Content-Type-Options" content="nosniff">
   <meta name="referrer" content="strict-origin-when-cross-origin">
   
-  <link rel="stylesheet" href="./css/styles.css?v=20261124_v121">
-  <link rel="stylesheet" href="./css/drilldown.css?v=20261124_v121">
+  <link rel="stylesheet" href="./css/styles.css?v=20261124_v122">
+  <link rel="stylesheet" href="./css/drilldown.css?v=20261124_v122">
+  <link rel="stylesheet" href="./css/sidebar.css?v=20261124_v122">
   <link rel="icon" href="./assets/logo_pibox_tada.jpg" type="image/jpeg">
 </head>
 <body>
 
-  <!-- Contenedor Maestro Persistente: Encabezado + Pulso Operacional + Navegación Sticky -->
+  <!-- Backdrop móvil para Sidebar -->
+  <div id="sidebarBackdrop" class="sidebar-backdrop"></div>
+
+  <!-- Sidebar Lateral Colapsable Pibox TaDa -->
+  <aside id="appSidebar" class="app-sidebar" aria-label="Menú principal">
+    <div class="sidebar-header">
+      <div class="sidebar-brand">
+        <div class="sidebar-brand-dot">PT</div>
+        <div class="sidebar-brand-text">
+          <span class="sidebar-brand-title">Pibox TaDa</span>
+          <span class="sidebar-brand-sub">Navegación</span>
+        </div>
+      </div>
+      <button type="button" id="btnSidebarToggle" class="sidebar-toggle-btn" title="Colapsar / expandir menú lateral">◀</button>
+    </div>
+
+    <nav class="sidebar-nav-scroll">
+      <div class="sidebar-group">
+        <div class="sidebar-group-label">Operación en Vivo</div>
+        <button class="nav-tab active" data-tab="malla" data-tooltip="Módulo 1: Confiabilidad & Prod.">
+          <span class="sidebar-item-icon">⚡</span>
+          <span class="sidebar-item-label">Módulo 1: Confiabilidad</span>
+        </button>
+        <button class="nav-tab" data-tab="cobertura" data-tooltip="Módulo 2: Cobertura & Suplentes">
+          <span class="sidebar-item-icon">🛡️</span>
+          <span class="sidebar-item-label">Módulo 2: Cobertura</span>
+          <span class="tab-badge tab-badge-alert" id="tabBadgeCoverage">Preventivo</span>
+        </button>
+      </div>
+
+      <div class="sidebar-group">
+        <div class="sidebar-group-label">Riesgo &amp; Flota</div>
+        <button class="nav-tab" data-tab="flota-critica" data-tooltip="Módulo: Flota Crítica">
+          <span class="sidebar-item-icon">🚨</span>
+          <span class="sidebar-item-label">Flota Crítica</span>
+          <span class="tab-badge tab-badge-alert" id="tabBadgeCritical">Top Riesgo</span>
+        </button>
+        <button class="nav-tab" data-tab="pilotos" data-tooltip="Ficha de Piloto 360°">
+          <span class="sidebar-item-icon">👤</span>
+          <span class="sidebar-item-label">Ficha de Piloto</span>
+          <span class="tab-badge">360°</span>
+        </button>
+      </div>
+
+      <div class="sidebar-group">
+        <div class="sidebar-group-label">Analítica &amp; IA</div>
+        <button class="nav-tab" data-tab="metricas" data-tooltip="Módulo 3: Analítica de Semanas">
+          <span class="sidebar-item-icon">📊</span>
+          <span class="sidebar-item-label">Módulo 3: Semanas</span>
+          <span class="tab-badge">Histórico</span>
+        </button>
+        <button class="nav-tab" data-tab="inteligencia" data-tooltip="Inteligencia Operativa">
+          <span class="sidebar-item-icon">🧠</span>
+          <span class="sidebar-item-label">Inteligencia Op.</span>
+          <span class="tab-badge tab-badge-alert" id="tabBadgeIntelligence">IA &amp; Reglas</span>
+        </button>
+      </div>
+    </nav>
+
+    <div class="sidebar-footer">
+      <span>🟣</span>
+      <span class="sidebar-footer-text">Pibox Control v122</span>
+    </div>
+  </aside>
+
+  <div class="app-workspace">
+  <!-- Contenedor Maestro Persistente: Encabezado + Pulso Operacional -->
   <div class="sticky-navigation-shell" id="stickyNavigationShell">
     <!-- Encabezado Principal y Barra de Comando Global -->
     <header class="app-header">
       <div class="header-inner">
         <div class="brand-section">
+          <button type="button" id="btnMobileSidebarOpen" class="mobile-sidebar-btn" title="Abrir menú de navegación">☰</button>
           <div class="brand-logo-frame">
             <img src="./assets/logo_pibox_tada.jpg" alt="Logo Pibox TaDa" class="brand-logo-img">
           </div>
@@ -120,30 +188,6 @@
         </div>
       </div>
     </section>
-
-    <!-- Pestañas de Navegación Operativa (Persistente) -->
-    <nav class="nav-tabs-wrapper">
-      <div class="nav-tabs">
-        <button class="nav-tab active" data-tab="malla">
-          <span>⚡</span> Módulo 1: Confiabilidad &amp; Prod.
-        </button>
-        <button class="nav-tab" data-tab="cobertura">
-          <span>🛡️</span> Módulo 2: Cobertura &amp; Suplentes <span class="tab-badge tab-badge-alert" id="tabBadgeCoverage">Preventivo</span>
-        </button>
-        <button class="nav-tab" data-tab="flota-critica">
-          <span>🚨</span> Módulo: Flota Crítica <span class="tab-badge tab-badge-alert" id="tabBadgeCritical">Top Riesgo</span>
-        </button>
-        <button class="nav-tab" data-tab="metricas">
-          <span>📊</span> Módulo 3: Analítica de Semanas <span class="tab-badge">Histórico</span>
-        </button>
-        <button class="nav-tab" data-tab="pilotos">
-          <span>👤</span> Ficha de Piloto <span class="tab-badge">360°</span>
-        </button>
-        <button class="nav-tab" data-tab="inteligencia">
-          <span>🧠</span> Inteligencia Operativa <span class="tab-badge tab-badge-alert" id="tabBadgeIntelligence">IA &amp; Reglas</span>
-        </button>
-      </div>
-    </nav>
   </div>
 
   <!-- Contenido Principal -->
@@ -1326,6 +1370,7 @@
     </div>
 
   </main>
+  </div><!-- /.app-workspace -->
 
   <!-- MODAL: DRILL-DOWN INTERACTIVO DE CONSULTA DETALLADA (TARJETAS Y TABLAS) -->
   <div id="drilldownModalOverlay" class="drilldown-modal-overlay">
@@ -1347,42 +1392,55 @@
         <!-- Generado dinámicamente -->
       </div>
 
-      <!-- Filtros Desplegables Coordinados -->
-      <div class="drilldown-filters-bar">
-        <div class="drilldown-filter-group" style="max-width: 170px;">
+      <!-- Barra Compacta de Filtros Colapsables -->
+      <div class="drilldown-filters-toggle-row">
+        <button type="button" id="btnDrilldownToggleFilters" class="drilldown-toggle-filters-btn">
+          <span>🎛️ Filtros</span>
+          <span id="ddFilterToggleArrow">▾</span>
+        </button>
+        <div id="ddActiveFilterChips" class="drilldown-active-chips"></div>
+        <button type="button" id="btnDrilldownClear" class="drilldown-btn-clear" style="display:none;" title="Restablecer filtros a la consulta inicial">
+          🔄 Limpiar
+        </button>
+      </div>
+
+      <!-- Filtros Desplegables Coordinados (Colapsados por defecto) -->
+      <div id="drilldownFiltersBar" class="drilldown-filters-bar" style="display: none;">
+        <div class="drilldown-filter-group" id="ddGroupDate" style="max-width: 165px;">
           <label>📅 Fecha</label>
           <select id="ddFilterDate" class="drilldown-select">
             <option value="">Todas las Fechas</option>
           </select>
         </div>
-        <div class="drilldown-filter-group" style="max-width: 150px;">
+        <div class="drilldown-filter-group" id="ddGroupDay" style="max-width: 145px;">
           <label>🗓️ Día</label>
           <select id="ddFilterDay" class="drilldown-select">
             <option value="">Todos los Días</option>
           </select>
         </div>
-        <div class="drilldown-filter-group" style="max-width: 170px;">
+        <div class="drilldown-filter-group" id="ddGroupCity" style="max-width: 165px;">
           <label>🏙️ Ciudad</label>
           <select id="ddFilterCity" class="drilldown-select">
             <option value="">Todas las Ciudades</option>
           </select>
         </div>
-        <div class="drilldown-filter-group">
+        <div class="drilldown-filter-group" id="ddGroupStore">
           <label>🏪 Tienda / Punto</label>
           <select id="ddFilterStore" class="drilldown-select">
             <option value="">Todas las Tiendas</option>
           </select>
         </div>
-        <div class="drilldown-filter-group" style="max-width: 140px;">
+        <div class="drilldown-filter-group" id="ddGroupHour" style="max-width: 135px;">
           <label>⏰ Hora Turno</label>
           <select id="ddFilterHour" class="drilldown-select">
             <option value="">Todas las Horas</option>
           </select>
         </div>
-        <div>
-          <button id="btnDrilldownClear" class="drilldown-btn-clear" title="Restablecer filtros a la consulta inicial">
-            🔄 Limpiar Filtros
-          </button>
+        <div class="drilldown-filter-group" id="ddGroupCategory" style="max-width: 190px; display: none;">
+          <label id="ddLabelCategory">🏷️ Clasificación</label>
+          <select id="ddFilterCategory" class="drilldown-select">
+            <option value="">Todas</option>
+          </select>
         </div>
       </div>
 
@@ -1390,7 +1448,7 @@
       <div class="drilldown-modal-body">
         <div class="drilldown-table-wrapper">
           <table class="drilldown-table">
-            <thead>
+            <thead id="drilldownTableHead">
               <tr>
                 <th style="width: 40px; text-align: center;">#</th>
                 <th style="min-width: 95px;">Fecha</th>
@@ -1760,13 +1818,13 @@
   <script src="./js/operational-rules-engine.js?v=20261124_v120"></script>
   <script src="./js/operational-ai-analyst.js?v=20261124_v120"></script>
   <script src="./js/storage-db.js?v=20261124_v120"></script>
-  <script src="./js/sheets-service.js?v=20261124_v120"></script>
+  <script src="./js/sheets-service.js?v=20261124_v122"></script>
   <script src="./js/coverage-engine.js?v=20261124_v120"></script>
-  <script src="./js/charts.js?v=20261124_v120"></script>
+  <script src="./js/charts.js?v=20261124_v122"></script>
   <script src="./js/data.js?v=data_20261120"></script>
-  <script src="./js/drilldown.js?v=20261124_v121"></script>
+  <script src="./js/drilldown.js?v=20261124_v122"></script>
   <script src="./js/llamados-service.js?v=20261124_v121"></script>
-  <script src="./js/app.js?v=20261124_v121"></script>
+  <script src="./js/app.js?v=20261124_v122"></script>
 </body>
 </html>
 

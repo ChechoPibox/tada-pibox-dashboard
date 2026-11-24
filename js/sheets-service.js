@@ -347,6 +347,25 @@ const SheetsService = {
   },
 
   /**
+   * Normaliza el nombre de ciudad cuando viene como 'OP MELI', 'OP ...' o vacío,
+   * infiriendo la ciudad operativa real a partir del prefijo del punto/tienda.
+   */
+  normalizeCityByStore(rawCity, store) {
+    let city = String(rawCity || '').trim();
+    const upperCity = city.toUpperCase();
+    const upperStore = String(store || '').trim().toUpperCase();
+    if (!city || upperCity.includes('MELI') || upperCity.startsWith('OP')) {
+      if (upperStore.startsWith('BOG-')) city = 'Bogota';
+      else if (upperStore.startsWith('CAL-')) city = 'Cali';
+      else if (upperStore.startsWith('BUC-')) city = 'Bucaramanga';
+      else if (upperStore.startsWith('MDE-')) city = 'Medellin';
+      else if (upperStore.startsWith('SAM-')) city = 'Santa Marta';
+      else if (upperStore.startsWith('BAQ-') || upperStore.startsWith('BAR-')) city = 'Barranquilla';
+    }
+    return city;
+  },
+
+  /**
    * Procesa la matriz CSV de Sheet 1 (Malla)
    */
   processMallaData(csvRows) {
@@ -384,8 +403,8 @@ const SheetsService = {
 
       const pilotId = String(r[colId] || '').trim();
       const phone = String(r[colTel] || '').trim();
-      const city = String(r[colCiudad] || '').trim();
       const store = String(r[colSeller] || '').trim();
+      const city = this.normalizeCityByStore(r[colCiudad], store);
 
       const startMin = this.timeToMinutes(r[colInicio]);
       const arrivalMin = this.timeToMinutes(r[colLlegada]);
@@ -473,14 +492,7 @@ const SheetsService = {
         ? canonicalizeWeekday(rawWeekday, dateStr)
         : (rawWeekday || (dateStr ? dayNames[new Date(dateStr + 'T12:00:00').getDay()] : ''));
 
-      let city = String(r[colCiudad] || '').trim();
-      if (!city || city.toUpperCase().includes('MELI') || city.toUpperCase().startsWith('OP')) {
-        if (store.startsWith('BOG-')) city = 'Bogota';
-        else if (store.startsWith('CAL-')) city = 'Cali';
-        else if (store.startsWith('BUC-')) city = 'Bucaramanga';
-        else if (store.startsWith('MDE-')) city = 'Medellin';
-        else if (store.startsWith('SAM-')) city = 'Santa Marta';
-      }
+      const city = this.normalizeCityByStore(r[colCiudad], store);
       const rawStatus = String(r[colEstado] || '').trim();
       const startMin = this.timeToMinutes(r[colInicio]);
       const endMin = this.timeToMinutes(r[colFin]);

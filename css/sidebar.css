@@ -1,0 +1,361 @@
+/* ============================================================
+   SIDEBAR NAVIGATION MENU — PIBOX TADA DASHBOARD
+   Navegación lateral colapsable con identidad morada Pibox
+   ============================================================ */
+
+:root {
+  --sidebar-width: 256px;
+  --sidebar-collapsed-width: 72px;
+}
+
+/* Workspace que se desplaza suavemente junto al sidebar */
+.app-workspace {
+  margin-left: var(--sidebar-width);
+  min-height: 100vh;
+  transition: margin-left 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+}
+
+body.sidebar-collapsed .app-workspace {
+  margin-left: var(--sidebar-collapsed-width);
+}
+
+/* Sidebar fijo izquierdo */
+.app-sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: var(--sidebar-width);
+  background: linear-gradient(180deg, #130d26 0%, #0b0816 100%);
+  border-right: 1px solid rgba(139, 92, 246, 0.22);
+  box-shadow: 6px 0 28px rgba(0, 0, 0, 0.45);
+  z-index: 950;
+  display: flex;
+  flex-direction: column;
+  transition: width 0.25s cubic-bezier(0.16, 1, 0.3, 1), transform 0.25s ease;
+  overflow: visible;
+}
+
+body.sidebar-collapsed .app-sidebar {
+  width: var(--sidebar-collapsed-width);
+}
+
+/* Encabezado del Sidebar */
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 14px;
+  border-bottom: 1px solid rgba(139, 92, 246, 0.16);
+  min-height: 68px;
+}
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.sidebar-brand-dot {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #7c3aed, #a855f7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 0.9rem;
+  color: #fff;
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.4);
+}
+
+.sidebar-brand-text {
+  display: flex;
+  flex-direction: column;
+  transition: opacity 0.18s ease;
+}
+
+.sidebar-brand-title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #f8fafc;
+  letter-spacing: 0.01em;
+}
+
+.sidebar-brand-sub {
+  font-size: 0.66rem;
+  color: #a78bfa;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+body.sidebar-collapsed .sidebar-brand-text {
+  opacity: 0;
+  width: 0;
+  pointer-events: none;
+}
+
+body.sidebar-collapsed .sidebar-header {
+  justify-content: center;
+  padding: 16px 8px;
+}
+
+body.sidebar-collapsed .sidebar-brand {
+  display: none;
+}
+
+.sidebar-toggle-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: rgba(139, 92, 246, 0.14);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  color: #ddd6fe;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  flex-shrink: 0;
+  transition: all 0.18s ease;
+}
+
+.sidebar-toggle-btn:hover {
+  background: rgba(124, 58, 237, 0.35);
+  border-color: #a78bfa;
+  color: #fff;
+}
+
+/* Contenido scrollable del Sidebar */
+.sidebar-nav-scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: visible;
+  padding: 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.sidebar-nav-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+.sidebar-nav-scroll::-webkit-scrollbar-thumb {
+  background: rgba(139, 92, 246, 0.28);
+  border-radius: 4px;
+}
+
+.sidebar-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sidebar-group-label {
+  font-size: 0.64rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(167, 139, 250, 0.65);
+  padding: 4px 10px 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  transition: opacity 0.18s ease;
+}
+
+body.sidebar-collapsed .sidebar-group-label {
+  text-align: center;
+  padding: 4px 0;
+  font-size: 0;
+}
+
+body.sidebar-collapsed .sidebar-group-label::after {
+  content: '•••';
+  font-size: 0.65rem;
+  color: rgba(167, 139, 250, 0.45);
+}
+
+/* Botones de navegación (conserva .nav-tab para compatibilidad total con switchTab) */
+.app-sidebar .nav-tab {
+  position: relative;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #cbd5e1;
+  font-size: 0.82rem;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease, transform 0.15s ease;
+  white-space: nowrap;
+}
+
+.app-sidebar .nav-tab:hover {
+  background: rgba(139, 92, 246, 0.12);
+  color: #fff;
+  border-color: rgba(139, 92, 246, 0.22);
+}
+
+.app-sidebar .nav-tab.active {
+  background: linear-gradient(90deg, rgba(124, 58, 237, 0.28) 0%, rgba(124, 58, 237, 0.10) 100%);
+  border-color: rgba(167, 139, 250, 0.45);
+  color: #ffffff;
+  font-weight: 600;
+  box-shadow: 0 4px 14px rgba(124, 58, 237, 0.2);
+}
+
+.app-sidebar .nav-tab.active::before {
+  content: '';
+  position: absolute;
+  left: -10px;
+  top: 20%;
+  bottom: 20%;
+  width: 3px;
+  border-radius: 0 4px 4px 0;
+  background: #a855f7;
+  box-shadow: 0 0 8px #a855f7;
+}
+
+.sidebar-item-icon {
+  font-size: 1.05rem;
+  width: 24px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.sidebar-item-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-sidebar .tab-badge {
+  font-size: 0.65rem;
+  padding: 2px 6px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
+/* Estado Colapsado: solo iconos + tooltip */
+body.sidebar-collapsed .app-sidebar .nav-tab {
+  justify-content: center;
+  padding: 11px 8px;
+}
+
+body.sidebar-collapsed .sidebar-item-label,
+body.sidebar-collapsed .app-sidebar .tab-badge {
+  display: none;
+}
+
+body.sidebar-collapsed .app-sidebar .nav-tab[data-tooltip]:hover::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: calc(100% + 12px);
+  top: 50%;
+  transform: translateY(-50%);
+  background: #1e1638;
+  color: #f8fafc;
+  border: 1px solid rgba(167, 139, 250, 0.45);
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+  z-index: 1200;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+}
+
+/* Pie del Sidebar */
+.sidebar-footer {
+  padding: 12px 14px;
+  border-top: 1px solid rgba(139, 92, 246, 0.16);
+  font-size: 0.7rem;
+  color: rgba(148, 163, 184, 0.75);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+body.sidebar-collapsed .sidebar-footer {
+  justify-content: center;
+  padding: 12px 8px;
+}
+
+body.sidebar-collapsed .sidebar-footer-text {
+  display: none;
+}
+
+/* Botón hamburguesa móvil (oculto en desktop) */
+.mobile-sidebar-btn {
+  display: none;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: rgba(124, 58, 237, 0.18);
+  border: 1px solid rgba(167, 139, 250, 0.35);
+  color: #f8fafc;
+  font-size: 1.1rem;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 3, 12, 0.68);
+  backdrop-filter: blur(3px);
+  z-index: 940;
+}
+
+.sidebar-backdrop.active {
+  display: block;
+}
+
+/* Responsive: tablet/móvil convierte sidebar en drawer */
+@media (max-width: 1024px) {
+  .app-workspace,
+  body.sidebar-collapsed .app-workspace {
+    margin-left: 0;
+  }
+
+  .mobile-sidebar-btn {
+    display: inline-flex;
+  }
+
+  .app-sidebar {
+    transform: translateX(-100%);
+    width: var(--sidebar-width) !important;
+  }
+
+  .app-sidebar.mobile-open {
+    transform: translateX(0);
+  }
+
+  body.sidebar-collapsed .sidebar-brand,
+  body.sidebar-collapsed .sidebar-brand-text,
+  body.sidebar-collapsed .sidebar-item-label,
+  body.sidebar-collapsed .app-sidebar .tab-badge,
+  body.sidebar-collapsed .sidebar-footer-text {
+    display: flex;
+    opacity: 1;
+    width: auto;
+  }
+}

@@ -11,6 +11,7 @@ const DrilldownEngine = {
   filteredRecords: [],
   currentPage: 1,
   pageSize: 25,
+  filtersExpanded: false,
 
   /**
    * Identifica si un turno es una cancelación computable (Piloto Cancela o Cliente Cancela)
@@ -254,7 +255,8 @@ const DrilldownEngine = {
         city: options.city || '',
         store: options.store || '',
         hour: '',
-        status: options.initialStatusFilter || ''
+        status: options.initialStatusFilter || '',
+        category: ''
       }
     };
 
@@ -268,6 +270,11 @@ const DrilldownEngine = {
     if (subtitleEl) subtitleEl.innerText = subtitle;
     if (iconEl) iconEl.innerText = icon;
 
+    // Colapsar panel de filtros por defecto y adaptar al contexto
+    this.setFiltersExpanded(false);
+    this.adaptFiltersToContext();
+    this.renderTableHead();
+
     // Llenar selectores desplegables
     this.populateFilters();
 
@@ -278,6 +285,46 @@ const DrilldownEngine = {
     overlay.classList.add('active');
     overlay.style.display = 'flex';
     document.body.style.overflow = 'hidden';
+  },
+
+  /**
+   * Expande o colapsa la barra de filtros internos
+   */
+  setFiltersExpanded(expanded) {
+    this.filtersExpanded = Boolean(expanded);
+    const bar = document.getElementById('drilldownFiltersBar');
+    const btn = document.getElementById('btnDrilldownToggleFilters');
+    const arrow = document.getElementById('ddFilterToggleArrow');
+    if (bar) bar.style.display = this.filtersExpanded ? 'flex' : 'none';
+    if (btn) btn.classList.toggle('active', this.filtersExpanded);
+    if (arrow) arrow.textContent = this.filtersExpanded ? '▴' : '▾';
+  },
+
+  /**
+   * Adapta qué filtros son visibles según el origen de la consulta
+   */
+  adaptFiltersToContext() {
+    if (!this.currentContext) return;
+    const type = this.currentContext.type;
+    const grpDay = document.getElementById('ddGroupDay');
+    const grpCategory = document.getElementById('ddGroupCategory');
+    const lblCategory = document.getElementById('ddLabelCategory');
+
+    if (grpDay) {
+      grpDay.style.display = (type === 'card_vacancies' || type === 'table_daily_radiography') ? 'none' : 'flex';
+    }
+
+    if (grpCategory) {
+      if (type === 'card_cancellations') {
+        grpCategory.style.display = 'flex';
+        if (lblCategory) lblCategory.textContent = '🏷️ Tipo Cancelación';
+      } else if (type === 'card_vacancies') {
+        grpCategory.style.display = 'flex';
+        if (lblCategory) lblCategory.textContent = '🏷️ Cobertura Vacante';
+      } else {
+        grpCategory.style.display = 'none';
+      }
+    }
   },
 
   /**
@@ -347,6 +394,24 @@ const DrilldownEngine = {
         hours.map(h => `<option value="${h}">${h}</option>`).join('');
       selectHour.value = this.currentContext.filters.hour || '';
     }
+
+    // Filtro contextual por categoría (solo en Cancelaciones y Vacantes)
+    const selectCat = document.getElementById('ddFilterCategory');
+    if (selectCat) {
+      const type = this.currentContext.type;
+      if (type === 'card_cancellations') {
+        selectCat.innerHTML = '<option value="">Todas</option>' +
+          '<option value="Cancelación de Piloto">Cancelación de Piloto</option>' +
+          '<option value="Cancelación de Cliente">Cancelación de Cliente</option>';
+      } else if (type === 'card_vacancies') {
+        selectCat.innerHTML = '<option value="">Todas</option>' +
+          '<option value="unmatched">Sin Cubrir (Vacante)</option>' +
+          '<option value="matched">Cubierto con Reemplazo</option>';
+      } else {
+        selectCat.innerHTML = '<option value="">Todas</option>';
+      }
+      selectCat.value = this.currentContext.filters.category || '';
+    }
   },
 
   /**
@@ -400,13 +465,76 @@ const DrilldownEngine = {
         if (hStr !== filters.hour) return false;
       }
 
+      // Filtro Contextual (Tipo de Cancelación / Cobertura Vacante)
+      if (filters.category) {
+        if (this.currentContext.type === 'card_cancellations') {
+          if (r._drilldownReason !== filters.category) return false;
+        } else if (this.currentContext.type === 'card_vacancies') {
+          if (filters.category === 'unmatched' && !r._isUnmatchedVacancy) return false;
+          if (filters.category === 'matched' && r._isUnmatchedVacancy) return false;
+        }
+      }
+
       return true;
     });
 
     this.currentPage = 1;
+    this.renderActiveFilterChips();
     this.renderSummaryStrip();
     this.renderTablePage();
     this.renderPagination();
+  },
+
+  /**
+   * Renderiza chips removibles de filtros activos en la barra compacta
+   */
+  renderActiveFilterChips() {
+    const chipsContainer = document.getElementById('ddActiveFilterChips');
+    const clearBtn = document.getElementById('btnDrilldownClear');
+    if (!chipsContainer || !this.currentContext) return;
+
+    const f = this.currentContext.filters;
+    const labels = [
+      { key: 'date', label: 'Fecha', val: f.date },
+      { key: 'weekday', label: 'Día', val: f.weekday },
+      { key: 'city', label: 'Ciudad', val: f.city },
+      { key: 'store', label: 'Tienda', val: f.store ? f.store.split(' - ')[0] : '' },
+      { key: 'hour', label: 'Hora', val: f.hour },
+      {
+        key: 'category',
+        label: this.currentContext.type === 'card_vacancies' ? 'Cobertura' : 'Tipo',
+        val: f.category === 'unmatched' ? 'Sin Cubrir' : (f.category === 'matched' ? 'Con Reemplazo' : f.category)
+      }
+    ].filter(item => Boolean(item.val));
+
+    if (clearBtn) {
+      clearBtn.style.display = labels.length > 0 ? 'inline-flex' : 'none';
+    }
+
+    if (labels.length === 0) {
+      chipsContainer.innerHTML = '<span style="font-size:0.72rem;color:var(--text-muted);opacity:0.8;">Sin filtros adicionales activos</span>';
+      return;
+    }
+
+    chipsContainer.innerHTML = labels.map(item => `
+      <span class="drilldown-active-chip">
+        ${escapeHtml(item.label)}: <strong>${escapeHtml(item.val)}</strong>
+        <button type="button" onclick="DrilldownEngine.removeFilter('${item.key}')" title="Quitar filtro">✕</button>
+      </span>
+    `).join('');
+  },
+
+  /**
+   * Quita un filtro individual desde su chip activo
+   */
+  removeFilter(key) {
+    if (!this.currentContext) return;
+    this.currentContext.filters[key] = '';
+    if (key === 'city') {
+      this.currentContext.filters.store = '';
+    }
+    this.populateFilters();
+    this.applyInternalFilters();
   },
 
   /**
@@ -462,16 +590,64 @@ const DrilldownEngine = {
   },
 
   /**
+   * Define las columnas adaptativas según el origen de la consulta
+   */
+  getColumnConfig(type) {
+    const base = [
+      { key: 'idx', label: '#', style: 'width: 40px; text-align: center;' },
+      { key: 'date', label: 'Fecha', style: 'min-width: 95px;' },
+      { key: 'weekday', label: 'Día', style: 'min-width: 85px;' },
+      { key: 'city', label: 'Ciudad', style: 'min-width: 95px;' },
+      { key: 'store', label: 'Tienda / Punto', style: 'min-width: 170px;' },
+      { key: 'start', label: 'Hora Inicio', style: 'min-width: 75px; text-align: center;' },
+      { key: 'pilot', label: 'Piloto / ID', style: 'min-width: 160px;' },
+      { key: 'status', label: 'Estado Turno', style: 'min-width: 110px; text-align: center;' }
+    ];
+
+    if (type === 'card_cancellations') {
+      return [
+        ...base,
+        { key: 'reason', label: 'Tipo Cancelación', style: 'min-width: 150px; text-align: center;' }
+      ];
+    }
+
+    if (type === 'card_vacancies') {
+      return [
+        ...base.filter(c => c.key !== 'weekday'),
+        { key: 'reason', label: 'Cobertura / Match', style: 'min-width: 170px; text-align: center;' }
+      ];
+    }
+
+    return [
+      ...base,
+      { key: 'reason', label: 'Clasificación Operativa', style: 'min-width: 140px; text-align: center;' },
+      { key: 'load', label: 'Carga / Horas', style: 'min-width: 110px; text-align: center;' }
+    ];
+  },
+
+  /**
+   * Renderiza los encabezados de columna adaptativos
+   */
+  renderTableHead() {
+    const thead = document.getElementById('drilldownTableHead');
+    if (!thead) return;
+    const cols = this.getColumnConfig(this.currentContext?.type);
+    thead.innerHTML = `<tr>${cols.map(c => `<th style="${c.style}">${c.label}</th>`).join('')}</tr>`;
+  },
+
+  /**
    * Renderiza la página actual de la tabla
    */
   renderTablePage() {
     const tbody = document.getElementById('drilldownTableBody');
     if (!tbody) return;
 
+    const cols = this.getColumnConfig(this.currentContext?.type);
+
     if (this.filteredRecords.length === 0) {
       tbody.innerHTML = `
         <tr>
-          <td colspan="10">
+          <td colspan="${cols.length}">
             <div class="drilldown-empty-state">
               <div class="empty-icon">🔎</div>
               <h4>No se encontraron registros</h4>
@@ -494,30 +670,27 @@ const DrilldownEngine = {
 
       const pilotName = r.pilot && String(r.pilot).trim() !== '' ? r.pilot : (r.pilot_id || 'Sin Asignar');
       const storeShort = (r.store || 'Sin Tienda').split(' - ')[0];
-
-      // Formateo de fecha y día
       const weekdayStr = typeof canonicalizeWeekday === 'function' ? canonicalizeWeekday(r.weekday, r.date) : (r.weekday || '—');
 
-      // Badges
       const statusBadge = r.status ? `<span class="pill pill-neutral">${escapeHtml(r.status)}</span>` : '<span class="pill pill-danger">Sin Estado</span>';
       const reasonBadge = r._drilldownReason
         ? `<span class="table-pct-badge ${r._drilldownBadge || 'badge-muted'}" style="font-size:0.72rem;">${escapeHtml(r._drilldownReason)}</span>`
         : statusBadge;
 
-      return `
-        <tr>
-          <td style="text-align:center;color:var(--text-muted);font-size:0.72rem;">${idxGlobal}</td>
-          <td style="white-space:nowrap;font-weight:600;color:#fff;">${escapeHtml(r.date || '—')}</td>
-          <td style="white-space:nowrap;"><span class="pill pill-neutral" style="font-size:0.7rem;">${escapeHtml(weekdayStr)}</span></td>
-          <td style="white-space:nowrap;"><strong>${escapeHtml(r.city || '—')}</strong></td>
-          <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(r.store || '')}">${escapeHtml(storeShort)}</td>
-          <td style="text-align:center;font-weight:700;color:#a78bfa;">${startStr}</td>
-          <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(pilotName)}">${escapeHtml(pilotName)}</td>
-          <td style="text-align:center;">${statusBadge}</td>
-          <td style="text-align:center;">${reasonBadge}</td>
-          <td style="text-align:center;color:var(--text-muted);">${packagesCount} paq · ${hoursCount}</td>
-        </tr>
-      `;
+      const cellMap = {
+        idx: `<td style="text-align:center;color:var(--text-muted);font-size:0.72rem;">${idxGlobal}</td>`,
+        date: `<td style="white-space:nowrap;font-weight:600;color:#fff;">${escapeHtml(r.date || '—')}</td>`,
+        weekday: `<td style="white-space:nowrap;"><span class="pill pill-neutral" style="font-size:0.7rem;">${escapeHtml(weekdayStr)}</span></td>`,
+        city: `<td style="white-space:nowrap;"><strong>${escapeHtml(r.city || '—')}</strong></td>`,
+        store: `<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(r.store || '')}">${escapeHtml(storeShort)}</td>`,
+        start: `<td style="text-align:center;font-weight:700;color:#a78bfa;">${startStr}</td>`,
+        pilot: `<td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(pilotName)}">${escapeHtml(pilotName)}</td>`,
+        status: `<td style="text-align:center;">${statusBadge}</td>`,
+        reason: `<td style="text-align:center;">${reasonBadge}</td>`,
+        load: `<td style="text-align:center;color:var(--text-muted);">${packagesCount} paq · ${hoursCount}</td>`
+      };
+
+      return `<tr>${cols.map(c => cellMap[c.key] || '').join('')}</tr>`;
     }).join('');
   },
 
@@ -562,6 +735,11 @@ const DrilldownEngine = {
     const overlay = document.getElementById('drilldownModalOverlay');
     const closeBtn = document.getElementById('btnDrilldownClose');
     const clearBtn = document.getElementById('btnDrilldownClear');
+    const toggleBtn = document.getElementById('btnDrilldownToggleFilters');
+
+    if (toggleBtn) {
+      toggleBtn.onclick = () => this.setFiltersExpanded(!this.filtersExpanded);
+    }
 
     if (closeBtn) closeBtn.onclick = () => this.closeModal();
 
@@ -584,6 +762,7 @@ const DrilldownEngine = {
     const selectCity = document.getElementById('ddFilterCity');
     const selectStore = document.getElementById('ddFilterStore');
     const selectHour = document.getElementById('ddFilterHour');
+    const selectCat = document.getElementById('ddFilterCategory');
 
     if (selectDate) {
       selectDate.onchange = () => {
@@ -632,10 +811,19 @@ const DrilldownEngine = {
       };
     }
 
+    if (selectCat) {
+      selectCat.onchange = () => {
+        if (this.currentContext) {
+          this.currentContext.filters.category = selectCat.value;
+          this.applyInternalFilters();
+        }
+      };
+    }
+
     if (clearBtn) {
       clearBtn.onclick = () => {
         if (this.currentContext) {
-          this.currentContext.filters = { date: '', weekday: '', city: '', store: '', hour: '', status: '' };
+          this.currentContext.filters = { date: '', weekday: '', city: '', store: '', hour: '', status: '', category: '' };
           this.populateFilters();
           this.applyInternalFilters();
         }

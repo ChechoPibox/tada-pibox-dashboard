@@ -697,7 +697,7 @@ async function initApp() {
     const meta = await TaDaDB.getMeta('last_sync');
 
     // Detectar caché obsoleto, incompleto o con esquema previo
-    const CACHE_VERSION = '2026-11-24-v121-drilldown-interactivo';
+    const CACHE_VERSION = '2026-11-24-v122-sidebar-ux-meli';
     const cachedVersion = await TaDaDB.getMeta('cache_version');
     const versionMismatch = cachedVersion !== CACHE_VERSION;
     const cachedCities = new Set(cachedMalla.map(r => r.city).filter(Boolean));
@@ -926,11 +926,51 @@ function updateTabBadges() {
 
 // Configurar escuchadores de eventos y selectores híbridos/múltiples
 function setupEventListeners() {
-  // Tabs de navegación de módulos
+  // Tabs de navegación de módulos + Sidebar colapsable
+  const appSidebar = document.getElementById('appSidebar');
+  const sidebarBackdrop = document.getElementById('sidebarBackdrop');
+  const btnSidebarToggle = document.getElementById('btnSidebarToggle');
+  const btnMobileSidebarOpen = document.getElementById('btnMobileSidebarOpen');
+
+  const applySidebarCollapsed = (collapsed) => {
+    document.body.classList.toggle('sidebar-collapsed', collapsed);
+    if (btnSidebarToggle) btnSidebarToggle.textContent = collapsed ? '▶' : '◀';
+    try { localStorage.setItem('pibox_sidebar_collapsed', collapsed ? '1' : '0'); } catch (_) {}
+  };
+
+  try {
+    if (localStorage.getItem('pibox_sidebar_collapsed') === '1') {
+      applySidebarCollapsed(true);
+    }
+  } catch (_) {}
+
+  if (btnSidebarToggle) {
+    btnSidebarToggle.addEventListener('click', () => {
+      applySidebarCollapsed(!document.body.classList.contains('sidebar-collapsed'));
+    });
+  }
+
+  const closeMobileSidebar = () => {
+    if (appSidebar) appSidebar.classList.remove('mobile-open');
+    if (sidebarBackdrop) sidebarBackdrop.classList.remove('active');
+  };
+
+  if (btnMobileSidebarOpen) {
+    btnMobileSidebarOpen.addEventListener('click', () => {
+      if (appSidebar) appSidebar.classList.add('mobile-open');
+      if (sidebarBackdrop) sidebarBackdrop.classList.add('active');
+    });
+  }
+
+  if (sidebarBackdrop) {
+    sidebarBackdrop.addEventListener('click', closeMobileSidebar);
+  }
+
   document.querySelectorAll('.nav-tab').forEach(tab => {
     tab.addEventListener('click', () => {
       const tabId = tab.getAttribute('data-tab');
       switchTab(tabId);
+      closeMobileSidebar();
     });
   });
 
@@ -1688,7 +1728,6 @@ function buildKpisCardsHtml(kpis) {
     {
       label: '2. Tasa de Cancelación',
       clickAction: 'card_cancellations',
-      drilldownBadge: '🔍 Ver detalle de cancelaciones',
       value: fmtPct(kpis.cancellationRatePct),
       sub: (() => {
         const raw = kpis.cuposFaltantesBreakdown?.rawCancels ?? kpis.penalizedBreakdown?.totalCancels ?? kpis.penalizedBreakdown?.pilotCancel ?? 0;
@@ -1725,7 +1764,6 @@ function buildKpisCardsHtml(kpis) {
     {
       label: '4. Cupos Faltantes (Vacantes)',
       clickAction: 'card_vacancies',
-      drilldownBadge: '🔍 Ver detalle de vacantes',
       value: fmtNum(kpis.cuposFaltantesTotal, 0),
       sub: `${kpis.cuposFaltantesBreakdown.unmatchedCancels} cancelados sin reemplazo · ${kpis.cuposFaltantesBreakdown.noProgramado} no prog · ${kpis.cuposFaltantesBreakdown.sinPiloto} sin piloto`,
       icon: '⚠️',
@@ -1923,6 +1961,7 @@ function buildKpisCardsHtml(kpis) {
           ${c.heroTag ? `<span class="hero-pill">${c.heroTag}</span>` : ''}
         </div>
         <div style="display:flex;align-items:center;gap:4px;">
+          ${c.clickAction ? `<span class="kpi-drilldown-icon" title="Consultar detalle">🔍</span>` : ''}
           <button type="button" class="kpi-info-btn" title="${escapeHtml(c.tooltip)}">ℹ️</button>
           <span class="kpi-icon">${c.icon}</span>
         </div>
@@ -1936,7 +1975,6 @@ function buildKpisCardsHtml(kpis) {
         <div class="kpi-progress-fill" style="width: ${c.progressPct.toFixed(1)}%;"></div>
       </div>`}
       <div class="kpi-sub">${c.sub}</div>
-      ${c.drilldownBadge ? `<div class="kpi-drilldown-badge">${c.drilldownBadge}</div>` : ''}
       ${c.alertHtml || ''}
     </div>
   `).join('');
@@ -4518,7 +4556,7 @@ function renderModulo3StoreCoverageTable(targetShifts, precomputedStats = null) 
 
     return `
       <tr style="${rowAlert}" class="drilldown-row" onclick="handleTableStoreDrilldown(decodeURIComponent('${safeStoreEnc}'), decodeURIComponent('${safeCityEnc}'))" title="🔍 Clic para consultar los registros detallados de esta tienda">
-        <td><strong>${escapeHtml(st.store)}</strong> <span style="font-size:0.7rem;color:#a78bfa;opacity:0.75;margin-left:4px;">🔍</span></td>
+        <td><strong>${escapeHtml(st.store)}</strong> <span class="drilldown-row-icon" aria-hidden="true">🔍</span></td>
         <td><span class="pill pill-neutral">${escapeHtml(st.city)}</span></td>
         <td style="text-align:center;"><strong>${st.requested}</strong></td>
         <td style="text-align:center;color:var(--text-muted);font-weight:600;">${st.confirmed}</td>
@@ -5121,7 +5159,7 @@ function renderCityStoreOperationalAnalysis(shifts, selectedCity = '') {
 
       return `
         <tr style="${rowAlert}" class="drilldown-row" onclick="handleCityStoreTableDrilldown('', decodeURIComponent('${safeStoreEnc}'))" title="🔍 Clic para consultar los registros detallados de ${escapeHtml(st.name)}">
-          <td><strong>${escapeHtml(st.name)}</strong> <span style="font-size:0.7rem;color:#a78bfa;opacity:0.75;margin-left:4px;">🔍</span></td>
+          <td><strong>${escapeHtml(st.name)}</strong> <span class="drilldown-row-icon" aria-hidden="true">🔍</span></td>
           <td style="text-align:center;"><strong>${st.kpi.totalShifts}</strong></td>
           <td style="text-align:center;">
             <span class="table-pct-badge badge-emerald" title="Cubiertos: ${st.kpi.attended} de ${st.kpi.totalShifts}">
@@ -5243,7 +5281,7 @@ function renderCityStoreOperationalAnalysis(shifts, selectedCity = '') {
 
     return `
       <tr style="${rowAlert}" class="drilldown-row" onclick="handleCityStoreTableDrilldown(decodeURIComponent('${safeCityEnc}'), '')" title="🔍 Clic para consultar los registros detallados de ${escapeHtml(c.name)}">
-        <td><strong>${escapeHtml(c.name)}</strong> <span style="font-size:0.7rem;color:#38bdf8;opacity:0.75;margin-left:4px;">🔍</span></td>
+        <td><strong>${escapeHtml(c.name)}</strong> <span class="drilldown-row-icon" aria-hidden="true">🔍</span></td>
         <td style="text-align:center;"><strong>${c.kpi.totalShifts}</strong></td>
         <td style="text-align:center;">
           <span class="table-pct-badge badge-emerald" title="Cubiertos: ${c.kpi.attended} de ${c.kpi.totalShifts}">

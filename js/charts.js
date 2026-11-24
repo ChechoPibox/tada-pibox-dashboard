@@ -591,7 +591,7 @@ const ChartManager = {
             icon: '🗓️',
             options: { weekday: '${d}', scope: 'modulo3' }
           })" title="🔍 Clic para consultar los turnos detallados del ${d}">
-            <td><strong>${d}</strong> <span style="font-size:0.7rem;color:#c4b5fd;margin-left:4px;">🔍</span></td>
+            <td><strong>${d}</strong> <span class="drilldown-row-icon" aria-hidden="true">🔍</span></td>
             <td style="text-align:center;"><strong>${item.total}</strong></td>
             <td style="text-align:center;">
               <span class="table-pct-badge badge-emerald">
