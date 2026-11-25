@@ -288,6 +288,27 @@ function normalizeKeyStr(s) {
     .replace(/\s+/g, ' ');
 }
 
+let _productivityTargetIndex = null;
+let _productivityTargetIndexLen = -1;
+
+function _getProductivityTargetIndex() {
+  if (typeof PRODUCTIVITY_TARGETS === 'undefined' || !PRODUCTIVITY_TARGETS.length) return null;
+  if (_productivityTargetIndex && _productivityTargetIndexLen === PRODUCTIVITY_TARGETS.length) {
+    return _productivityTargetIndex;
+  }
+  const idx = new Map();
+  for (let i = 0; i < PRODUCTIVITY_TARGETS.length; i++) {
+    const m = PRODUCTIVITY_TARGETS[i];
+    if (m.target_packages == null) continue;
+    const key = normalizeKeyStr(m.store);
+    if (!idx.has(key)) idx.set(key, []);
+    idx.get(key).push(m);
+  }
+  _productivityTargetIndex = idx;
+  _productivityTargetIndexLen = PRODUCTIVITY_TARGETS.length;
+  return idx;
+}
+
 /**
  * Realiza una coincidencia exacta de datos (Match) cruzando la hoja de productividad
  * mediante la clave compuesta: [PUNTO + DÍA DE LA SEMANA + INICIO DE TURNO]
@@ -295,34 +316,37 @@ function normalizeKeyStr(s) {
  * Retorna el valor PROM. PAQ (meta esperada)
  */
 function findProductivityTargetExact(store, weekday, startMinutes) {
-  if (typeof PRODUCTIVITY_TARGETS === 'undefined' || !PRODUCTIVITY_TARGETS.length) return null;
-  if (!store) return null;
+  const idx = _getProductivityTargetIndex();
+  if (!idx || !store) return null;
 
   const nStore = normalizeKeyStr(store);
   const nDay = normalizeKeyStr(weekday);
 
+  // Recolectar candidatos: O(1) por clave exacta, o búsqueda sobre claves únicas de tienda
+  let storeCandidates = idx.get(nStore);
+  if (!storeCandidates) {
+    storeCandidates = [];
+    for (const [k, entries] of idx.entries()) {
+      if (nStore.includes(k) || k.includes(nStore)) {
+        for (let i = 0; i < entries.length; i++) storeCandidates.push(entries[i]);
+      }
+    }
+  }
+  if (!storeCandidates.length) return null;
+
   // 1. Coincidencia exacta con tolerancia de inicio de turno (+/- 30 min)
   if (nDay && startMinutes != null) {
-    const match = PRODUCTIVITY_TARGETS.find(m => {
-      const matchStore = normalizeKeyStr(m.store) === nStore ||
-                         nStore.includes(normalizeKeyStr(m.store)) ||
-                         normalizeKeyStr(m.store).includes(nStore);
-      const matchDay = normalizeKeyStr(m.weekday) === nDay;
-      const matchTime = m.start_minutes != null && Math.abs(m.start_minutes - startMinutes) <= 30;
-      return matchStore && matchDay && matchTime && m.target_packages != null;
-    });
+    const match = storeCandidates.find(m =>
+      normalizeKeyStr(m.weekday) === nDay &&
+      m.start_minutes != null &&
+      Math.abs(m.start_minutes - startMinutes) <= 30
+    );
     if (match) return match.target_packages;
   }
 
   // 2. Coincidencia por Punto + Día
   if (nDay) {
-    const dayMatches = PRODUCTIVITY_TARGETS.filter(m => {
-      const matchStore = normalizeKeyStr(m.store) === nStore ||
-                         nStore.includes(normalizeKeyStr(m.store)) ||
-                         normalizeKeyStr(m.store).includes(nStore);
-      const matchDay = normalizeKeyStr(m.weekday) === nDay;
-      return matchStore && matchDay && m.target_packages != null;
-    });
+    const dayMatches = storeCandidates.filter(m => normalizeKeyStr(m.weekday) === nDay);
     if (dayMatches.length > 0) {
       const sum = dayMatches.reduce((acc, m) => acc + m.target_packages, 0);
       return Math.round((sum / dayMatches.length) * 10) / 10;
@@ -330,18 +354,8 @@ function findProductivityTargetExact(store, weekday, startMinutes) {
   }
 
   // 3. Promedio histórico de la tienda
-  const storeMatches = PRODUCTIVITY_TARGETS.filter(m => {
-    return (normalizeKeyStr(m.store) === nStore ||
-            nStore.includes(normalizeKeyStr(m.store)) ||
-            normalizeKeyStr(m.store).includes(nStore)) &&
-            m.target_packages != null;
-  });
-  if (storeMatches.length > 0) {
-    const sum = storeMatches.reduce((acc, m) => acc + m.target_packages, 0);
-    return Math.round((sum / storeMatches.length) * 10) / 10;
-  }
-
-  return null;
+  const sum = storeCandidates.reduce((acc, m) => acc + m.target_packages, 0);
+  return Math.round((sum / storeCandidates.length) * 10) / 10;
 }
 
 /**

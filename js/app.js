@@ -697,7 +697,7 @@ async function initApp() {
     const meta = await TaDaDB.getMeta('last_sync');
 
     // Detectar caché obsoleto, incompleto o con esquema previo
-    const CACHE_VERSION = '2026-11-25-v125-drilldown-date-groups';
+    const CACHE_VERSION = '2026-11-25-v126-audit-optimization';
     const cachedVersion = await TaDaDB.getMeta('cache_version');
     const versionMismatch = cachedVersion !== CACHE_VERSION;
     const cachedCities = new Set(cachedMalla.map(r => r.city).filter(Boolean));
@@ -926,56 +926,10 @@ function updateTabBadges() {
 
 // Configurar escuchadores de eventos y selectores híbridos/múltiples
 function setupEventListeners() {
-  // Tabs de navegación de módulos + Sidebar colapsable
+  // Tabs de navegación de módulos + Sidebar minimalista (drawer en móvil)
   const appSidebar = document.getElementById('appSidebar');
   const sidebarBackdrop = document.getElementById('sidebarBackdrop');
-  const btnSidebarToggle = document.getElementById('btnSidebarToggle');
   const btnMobileSidebarOpen = document.getElementById('btnMobileSidebarOpen');
-
-  const applySidebarCollapsed = (collapsed) => {
-    document.body.classList.toggle('sidebar-collapsed', collapsed);
-    if (!collapsed) document.body.classList.remove('sidebar-hover-expanded');
-    if (btnSidebarToggle) {
-      btnSidebarToggle.textContent = collapsed ? '▶' : '◀';
-      btnSidebarToggle.title = collapsed ? 'Fijar menú lateral abierto' : 'Activar modo compacto automático';
-    }
-    try { localStorage.setItem('pibox_sidebar_collapsed', collapsed ? '1' : '0'); } catch (_) {}
-  };
-
-  // Por defecto inicia en modo compacto automático (hover para desplegar) salvo que el usuario lo fije abierto
-  try {
-    const savedSidebar = localStorage.getItem('pibox_sidebar_collapsed');
-    applySidebarCollapsed(savedSidebar !== '0');
-  } catch (_) {
-    applySidebarCollapsed(true);
-  }
-
-  let sidebarHoverTimer = null;
-  if (appSidebar) {
-    appSidebar.addEventListener('mouseenter', () => {
-      if (window.innerWidth <= 1024 || !document.body.classList.contains('sidebar-collapsed')) return;
-      if (sidebarHoverTimer) {
-        clearTimeout(sidebarHoverTimer);
-        sidebarHoverTimer = null;
-      }
-      document.body.classList.add('sidebar-hover-expanded');
-    });
-
-    appSidebar.addEventListener('mouseleave', () => {
-      if (window.innerWidth <= 1024) return;
-      if (sidebarHoverTimer) clearTimeout(sidebarHoverTimer);
-      sidebarHoverTimer = setTimeout(() => {
-        document.body.classList.remove('sidebar-hover-expanded');
-        sidebarHoverTimer = null;
-      }, 140);
-    });
-  }
-
-  if (btnSidebarToggle) {
-    btnSidebarToggle.addEventListener('click', () => {
-      applySidebarCollapsed(!document.body.classList.contains('sidebar-collapsed'));
-    });
-  }
 
   const closeMobileSidebar = () => {
     if (appSidebar) appSidebar.classList.remove('mobile-open');
@@ -1274,6 +1228,20 @@ function switchTab(tabId) {
   document.querySelectorAll('.nav-tab').forEach(t => {
     t.classList.toggle('active', t.getAttribute('data-tab') === tabId);
   });
+
+  // Actualizar breadcrumb de módulo activo en el encabezado
+  const breadcrumbEl = document.getElementById('activeModuleBreadcrumb');
+  if (breadcrumbEl) {
+    const moduleLabels = {
+      'malla': '⚡ Módulo 1: Confiabilidad',
+      'cobertura': '🛡️ Módulo 2: Cobertura',
+      'flota-critica': '🚨 Flota Crítica',
+      'pilotos': '👤 Ficha de Piloto 360°',
+      'metricas': '📊 Módulo 3: Semanas',
+      'inteligencia': '🧠 Inteligencia Operativa'
+    };
+    breadcrumbEl.textContent = moduleLabels[tabId] || tabId;
+  }
   document.querySelectorAll('.tab-content').forEach(c => {
     const isTarget = c.id === `tab-${tabId}`;
     if (isTarget) {
@@ -5547,7 +5515,45 @@ function renderIntelligenceCenter() {
     }
   }
 
-  // 5. Renderizar Decisiones Operativas
+  // 5. Renderizar Auditoría de Calidad de Datos
+  const dqContainer = document.getElementById('intelDataQualityContainer');
+  const dqBadge = document.getElementById('intelDataQualityBadge');
+  const dq = execSummary.dataQuality;
+  if (dqBadge && dq) {
+    dqBadge.textContent = `${dq.totalIssues} Hallazgo${dq.totalIssues === 1 ? '' : 's'}`;
+    dqBadge.style.background = dq.totalIssues > 0 ? 'rgba(245, 158, 11, 0.22)' : 'rgba(16, 185, 129, 0.2)';
+    dqBadge.style.color = dq.totalIssues > 0 ? '#fcd34d' : '#6ee7b7';
+  }
+  if (dqContainer && dq) {
+    if (dq.totalIssues === 0) {
+      dqContainer.innerHTML = `<div style="font-size:0.82rem; color:#6ee7b7; padding:10px 12px; background:rgba(16,185,129,0.08); border-radius:8px;">✅ Sin anomalías ni duplicados detectados en ${dq.auditedCount.toLocaleString()} registros auditados.</div>`;
+    } else {
+      const sevStyles = {
+        'Error': { bg: 'rgba(239,68,68,0.1)', border: '#ef4444', badge: '#ef4444' },
+        'Anomalía': { bg: 'rgba(245,158,11,0.1)', border: '#f59e0b', badge: '#d97706' },
+        'Inconsistencia': { bg: 'rgba(139,92,246,0.1)', border: '#8b5cf6', badge: '#7c3aed' },
+        'Advertencia': { bg: 'rgba(59,130,246,0.1)', border: '#3b82f6', badge: '#2563eb' }
+      };
+      dqContainer.innerHTML = dq.findings.map(f => {
+        const st = sevStyles[f.severity] || sevStyles['Advertencia'];
+        const samplesHtml = f.samples && f.samples.length
+          ? `<div style="font-size:0.72rem; color:#94a3b8; margin-top:4px;">Ejemplos: ${f.samples.map(s => escapeHtml(s)).join(' · ')}</div>`
+          : '';
+        return `
+          <div style="background:${st.bg}; border-left:3px solid ${st.border}; border-radius:6px; padding:10px 12px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+              <strong style="font-size:0.82rem; color:#fff;">${escapeHtml(f.title)}</strong>
+              <span style="font-size:0.68rem; font-weight:800; padding:2px 7px; border-radius:4px; background:${st.badge}; color:#fff; text-transform:uppercase;">${escapeHtml(f.severity)} · ${f.count}</span>
+            </div>
+            <div style="font-size:0.77rem; color:#cbd5e1; margin-top:3px;">${escapeHtml(f.description)}</div>
+            ${samplesHtml}
+          </div>
+        `;
+      }).join('');
+    }
+  }
+
+  // 6. Renderizar Decisiones Operativas
   renderDecisionsTable();
 }
 

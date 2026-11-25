@@ -14,7 +14,7 @@
   
   <link rel="stylesheet" href="./css/styles.css?v=20261124_v122">
   <link rel="stylesheet" href="./css/drilldown.css?v=20261125_v125">
-  <link rel="stylesheet" href="./css/sidebar.css?v=20261125_v124">
+  <link rel="stylesheet" href="./css/sidebar.css?v=20261125_v126">
   <link rel="icon" href="./assets/logo_pibox_tada.jpg" type="image/jpeg">
 </head>
 <body>
@@ -22,7 +22,7 @@
   <!-- Backdrop móvil para Sidebar -->
   <div id="sidebarBackdrop" class="sidebar-backdrop"></div>
 
-  <!-- Sidebar Lateral Colapsable Pibox TaDa -->
+  <!-- Sidebar Lateral Minimalista Pibox TaDa -->
   <aside id="appSidebar" class="app-sidebar" aria-label="Menú principal">
     <div class="sidebar-header">
       <div class="sidebar-brand">
@@ -32,7 +32,6 @@
           <span class="sidebar-brand-sub">Navegación</span>
         </div>
       </div>
-      <button type="button" id="btnSidebarToggle" class="sidebar-toggle-btn" title="Colapsar / expandir menú lateral">◀</button>
     </div>
 
     <nav class="sidebar-nav-scroll">
@@ -80,7 +79,7 @@
 
     <div class="sidebar-footer">
       <span>🟣</span>
-      <span class="sidebar-footer-text">Pibox Control v122</span>
+      <span class="sidebar-footer-text">Pibox Control v126</span>
     </div>
   </aside>
 
@@ -99,6 +98,7 @@
             <h1>
               Informe TaDa
               <span class="badge-bavaria">Bavaria</span>
+              <span id="activeModuleBreadcrumb" class="module-breadcrumb">⚡ Módulo 1: Confiabilidad</span>
               <span class="live-indicator">
                 <span class="live-pulse"></span>
                 <span id="lastSyncLabel">Conectando en Vivo...</span>
@@ -1281,6 +1281,22 @@
             </div>
           </div>
 
+          <!-- Componente de Auditoría de Calidad de Datos -->
+          <div class="card" style="margin-bottom: 24px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+              <div>
+                <h3 style="font-size: 1.05rem; font-weight: 700; margin: 0; display: flex; align-items: center; gap: 8px;">
+                  <span>🛡️</span> Auditoría de Calidad de Datos
+                </h3>
+                <span style="font-size: 0.78rem; color: var(--text-muted);">Detección automática de duplicados, anomalías y metas faltantes</span>
+              </div>
+              <span class="badge" id="intelDataQualityBadge" style="background: rgba(16,185,129,0.2); color: #6ee7b7; font-size: 0.75rem; padding: 4px 10px; border-radius: 999px;">0 Hallazgos</span>
+            </div>
+            <div id="intelDataQualityContainer" style="display: flex; flex-direction: column; gap: 10px;">
+              <!-- Hallazgos de DataQualityAuditor -->
+            </div>
+          </div>
+
           <!-- Componente de Historial de Decisiones Operativas -->
           <div class="card">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
@@ -1796,10 +1812,12 @@
 
   <!-- Módulos de la Aplicación -->
   <script src="./js/config.js?v=20261124_v120"></script>
+  <script src="./js/kpi-dictionary.js?v=20261125_v126"></script>
+  <script src="./js/data-quality-auditor.js?v=20261125_v126"></script>
   <script src="./js/productivity-matrix.js?v=20261124_v120"></script>
-  <script src="./js/rules.js?v=20261124_v120"></script>
-  <script src="./js/operational-rules-engine.js?v=20261124_v120"></script>
-  <script src="./js/operational-ai-analyst.js?v=20261124_v120"></script>
+  <script src="./js/rules.js?v=20261125_v126"></script>
+  <script src="./js/operational-rules-engine.js?v=20261125_v126"></script>
+  <script src="./js/operational-ai-analyst.js?v=20261125_v126"></script>
   <script src="./js/storage-db.js?v=20261124_v120"></script>
   <script src="./js/sheets-service.js?v=20261124_v122"></script>
   <script src="./js/coverage-engine.js?v=20261124_v120"></script>
@@ -1807,7 +1825,7 @@
   <script src="./js/data.js?v=data_20261120"></script>
   <script src="./js/drilldown.js?v=20261125_v125"></script>
   <script src="./js/llamados-service.js?v=20261124_v121"></script>
-  <script src="./js/app.js?v=20261125_v125"></script>
+  <script src="./js/app.js?v=20261125_v126"></script>
 </body>
 </html>
 

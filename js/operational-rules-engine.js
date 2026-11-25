@@ -128,13 +128,29 @@ const OperationalRulesEngine = {
       return { alerts: [], storeStats: {}, cityStats: {}, summary: null };
     }
 
-    // 1. Agrupar por Tienda
+    // 1. Agrupar por Tienda y Ciudad con clasificación normativa canónica
     const storeMap = {};
     const cityMap = {};
 
     filteredMalla.forEach(s => {
       const storeName = s.store || 'Sin Tienda';
       const cityName = s.city || 'Sin Ciudad';
+
+      const cls = typeof classifyShiftStatus === 'function'
+        ? classifyShiftStatus(s.status)
+        : { attended: false, pilotCancel: false, clientCancel: false, excluded: false };
+      const isPilotCancel = typeof isOperationalPilotCancel === 'function'
+        ? isOperationalPilotCancel(s)
+        : Boolean(cls.pilotCancel);
+      const isClientCancel = Boolean(cls.clientCancel);
+      const stLower = String(s.status || '').trim().toLowerCase();
+      const isReplacement = stLower === 'reemplazo' || stLower === 'reemplazos';
+      const isConfirmed = stLower === 'confirmado' || stLower === 'confirmados' || stLower === 'hibrido' || stLower === 'híbrido';
+
+      // Horas efectivas: 8h por defecto para turnos asistidos cuando hours === 0
+      const rawHours = Number(s.hours || 0);
+      const effectiveHours = cls.attended ? (rawHours > 0 ? rawHours : 8) : 0;
+      const pkgs = Number(s.packages || 0);
 
       if (!storeMap[storeName]) {
         storeMap[storeName] = {
@@ -144,18 +160,26 @@ const OperationalRulesEngine = {
           packages: 0,
           hours: 0,
           cancels: 0,
+          pilotCancels: 0,
+          clientCancels: 0,
           replacements: 0,
-          confirmed: 0
+          confirmed: 0,
+          attendedShifts: 0
         };
       }
       storeMap[storeName].shifts.push(s);
-      storeMap[storeName].packages += Number(s.packages || 0);
-      storeMap[storeName].hours += Number(s.hours || 0);
-
-      const st = String(s.status || '').toLowerCase();
-      if (st.includes('cancel')) storeMap[storeName].cancels++;
-      if (st === 'reemplazo') storeMap[storeName].replacements++;
-      if (st === 'confirmado') storeMap[storeName].confirmed++;
+      storeMap[storeName].packages += pkgs;
+      storeMap[storeName].hours += effectiveHours;
+      if (cls.attended) storeMap[storeName].attendedShifts++;
+      if (isPilotCancel) {
+        storeMap[storeName].cancels++;
+        storeMap[storeName].pilotCancels++;
+      } else if (isClientCancel) {
+        storeMap[storeName].cancels++;
+        storeMap[storeName].clientCancels++;
+      }
+      if (isReplacement) storeMap[storeName].replacements++;
+      if (isConfirmed) storeMap[storeName].confirmed++;
 
       if (!cityMap[cityName]) {
         cityMap[cityName] = {
@@ -164,15 +188,29 @@ const OperationalRulesEngine = {
           packages: 0,
           hours: 0,
           cancels: 0,
-          replacements: 0
+          pilotCancels: 0,
+          clientCancels: 0,
+          replacements: 0,
+          confirmed: 0,
+          attendedShifts: 0
         };
       }
       cityMap[cityName].shifts.push(s);
-      cityMap[cityName].packages += Number(s.packages || 0);
-      cityMap[cityName].hours += Number(s.hours || 0);
+      cityMap[cityName].packages += pkgs;
+      cityMap[cityName].hours += effectiveHours;
+      if (cls.attended) cityMap[cityName].attendedShifts++;
+      if (isPilotCancel) {
+        cityMap[cityName].cancels++;
+        cityMap[cityName].pilotCancels++;
+      } else if (isClientCancel) {
+        cityMap[cityName].cancels++;
+        cityMap[cityName].clientCancels++;
+      }
+      if (isReplacement) cityMap[cityName].replacements++;
+      if (isConfirmed) cityMap[cityName].confirmed++;
     });
 
-    // Conciliación precisa de vacantes por tienda usando reconcileShiftsMatch
+    // Conciliación precisa de vacantes por tienda y ciudad usando reconcileShiftsMatch
     Object.values(storeMap).forEach(st => {
       const matchRes = typeof reconcileShiftsMatch === 'function' ? reconcileShiftsMatch(st.shifts) : null;
       st.unmatchedCancels = matchRes ? matchRes.totalUnmatchedCancels : Math.max(0, st.cancels - st.replacements);
@@ -180,6 +218,17 @@ const OperationalRulesEngine = {
       st.covered = matchRes ? matchRes.totalSlotsCovered : (st.confirmed + st.replacements);
       st.coveragePct = st.scheduled > 0 ? (st.covered / st.scheduled) * 100 : 100;
       st.productivity = st.hours > 0 ? (st.packages / st.hours) : 0;
+    });
+
+    Object.values(cityMap).forEach(ct => {
+      const matchRes = typeof reconcileShiftsMatch === 'function' ? reconcileShiftsMatch(ct.shifts) : null;
+      ct.unmatchedCancels = matchRes ? matchRes.totalUnmatchedCancels : Math.max(0, ct.cancels - ct.replacements);
+      ct.scheduled = matchRes ? matchRes.totalSlotsRequired : (ct.confirmed + ct.cancels);
+      ct.covered = matchRes ? matchRes.totalSlotsCovered : (ct.confirmed + ct.replacements);
+      ct.coveragePct = ct.scheduled > 0 ? (ct.covered / ct.scheduled) * 100 : 100;
+      ct.productivity = ct.hours > 0 ? (ct.packages / ct.hours) : 0;
+      const evalDenom = ct.attendedShifts + ct.pilotCancels;
+      ct.cancelRate = evalDenom > 0 ? (ct.pilotCancels / evalDenom) * 100 : 0;
     });
 
     // 2. Evaluar reglas de Tienda
@@ -206,16 +255,25 @@ const OperationalRulesEngine = {
       });
     });
 
-    // 3. Agrupar por Piloto y evaluar reglas de Piloto
+    // 3. Agrupar por Piloto (canónicamente por pilot_id) y evaluar reglas de Piloto
     const pilotMap = {};
     filteredMalla.forEach(s => {
-      const pilotName = s.pilot || s.pilot_name;
-      if (!pilotName || pilotName === '—' || pilotName.toLowerCase().includes('vacante')) return;
+      const rawPilotId = s.pilot_id ? String(s.pilot_id).trim() : '';
+      const cleanPilotId = (rawPilotId && rawPilotId !== '—' && rawPilotId !== '-' && rawPilotId.toLowerCase() !== 'null' && rawPilotId.toLowerCase() !== 'undefined')
+        ? rawPilotId.toLowerCase()
+        : null;
+      const rawPilotName = String(s.pilot || s.pilot_name || '').trim();
+      const cleanPilotName = (rawPilotName && rawPilotName !== '—' && rawPilotName !== '-' && !rawPilotName.toLowerCase().includes('vacante') && rawPilotName.toLowerCase() !== 'sin piloto')
+        ? rawPilotName
+        : null;
 
-      if (!pilotMap[pilotName]) {
-        pilotMap[pilotName] = {
-          pilot: pilotName,
-          pilotId: s.pilot_id,
+      if (!cleanPilotId && !cleanPilotName) return;
+      const pilotKey = cleanPilotId || `NAME_${cleanPilotName.toLowerCase()}`;
+
+      if (!pilotMap[pilotKey]) {
+        pilotMap[pilotKey] = {
+          pilot: cleanPilotName || cleanPilotId,
+          pilotId: rawPilotId || null,
           store: s.store,
           city: s.city,
           scheduled: 0,
@@ -225,14 +283,26 @@ const OperationalRulesEngine = {
           hours: 0
         };
       }
-      pilotMap[pilotName].scheduled++;
-      const st = String(s.status || '').toLowerCase();
-      if (st.includes('cancel')) {
-        pilotMap[pilotName].cancels++;
-      } else {
-        pilotMap[pilotName].attended++;
-        pilotMap[pilotName].packages += Number(s.packages || 0);
-        pilotMap[pilotName].hours += Number(s.hours || 0);
+
+      const cls = typeof classifyShiftStatus === 'function'
+        ? classifyShiftStatus(s.status)
+        : { attended: false, pilotCancel: false, excluded: false };
+      const isPilotCancel = typeof isOperationalPilotCancel === 'function'
+        ? isOperationalPilotCancel(s)
+        : Boolean(cls.pilotCancel);
+
+      // Excluir eventos no imputables al piloto (Cliente Cancela, Tienda cerrada, Adicional no autorizado, Adicional Cancela)
+      if (cls.excluded || cls.clientCancel) return;
+
+      pilotMap[pilotKey].scheduled++;
+      if (isPilotCancel) {
+        pilotMap[pilotKey].cancels++;
+      } else if (cls.attended) {
+        const rawH = Number(s.hours || 0);
+        const effH = rawH > 0 ? rawH : 8;
+        pilotMap[pilotKey].attended++;
+        pilotMap[pilotKey].packages += Number(s.packages || 0);
+        pilotMap[pilotKey].hours += effH;
       }
     });
 
