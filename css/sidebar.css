@@ -42,6 +42,15 @@ body.sidebar-collapsed .app-sidebar {
   width: var(--sidebar-collapsed-width);
 }
 
+/* Despliegue automático al acercar el cursor cuando está contraído (desktop) */
+@media (min-width: 1025px) {
+  body.sidebar-collapsed .app-sidebar.sidebar-hover-open,
+  body.sidebar-collapsed .app-sidebar:hover {
+    width: var(--sidebar-width);
+    box-shadow: 12px 0 38px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(167, 139, 250, 0.25);
+  }
+}
+
 /* Encabezado del Sidebar */
 .sidebar-header {
   display: flex;
@@ -109,6 +118,26 @@ body.sidebar-collapsed .sidebar-header {
 
 body.sidebar-collapsed .sidebar-brand {
   display: none;
+}
+
+@media (min-width: 1025px) {
+  body.sidebar-collapsed .app-sidebar.sidebar-hover-open .sidebar-header,
+  body.sidebar-collapsed .app-sidebar:hover .sidebar-header {
+    justify-content: space-between;
+    padding: 16px 14px;
+  }
+
+  body.sidebar-collapsed .app-sidebar.sidebar-hover-open .sidebar-brand,
+  body.sidebar-collapsed .app-sidebar:hover .sidebar-brand {
+    display: flex;
+  }
+
+  body.sidebar-collapsed .app-sidebar.sidebar-hover-open .sidebar-brand-text,
+  body.sidebar-collapsed .app-sidebar:hover .sidebar-brand-text {
+    opacity: 1;
+    width: auto;
+    pointer-events: auto;
+  }
 }
 
 .sidebar-toggle-btn {
@@ -180,6 +209,20 @@ body.sidebar-collapsed .sidebar-group-label::after {
   content: '•••';
   font-size: 0.65rem;
   color: rgba(167, 139, 250, 0.45);
+}
+
+@media (min-width: 1025px) {
+  body.sidebar-collapsed .app-sidebar.sidebar-hover-open .sidebar-group-label,
+  body.sidebar-collapsed .app-sidebar:hover .sidebar-group-label {
+    text-align: left;
+    padding: 4px 10px 4px;
+    font-size: 0.64rem;
+  }
+
+  body.sidebar-collapsed .app-sidebar.sidebar-hover-open .sidebar-group-label::after,
+  body.sidebar-collapsed .app-sidebar:hover .sidebar-group-label::after {
+    content: none;
+  }
 }
 
 /* Botones de navegación (conserva .nav-tab para compatibilidad total con switchTab) */
@@ -278,6 +321,29 @@ body.sidebar-collapsed .app-sidebar .nav-tab[data-tooltip]:hover::after {
   pointer-events: none;
 }
 
+@media (min-width: 1025px) {
+  body.sidebar-collapsed .app-sidebar.sidebar-hover-open .nav-tab,
+  body.sidebar-collapsed .app-sidebar:hover .nav-tab {
+    justify-content: flex-start;
+    padding: 10px 12px;
+  }
+
+  body.sidebar-collapsed .app-sidebar.sidebar-hover-open .sidebar-item-label,
+  body.sidebar-collapsed .app-sidebar:hover .sidebar-item-label {
+    display: block;
+  }
+
+  body.sidebar-collapsed .app-sidebar.sidebar-hover-open .tab-badge,
+  body.sidebar-collapsed .app-sidebar:hover .tab-badge {
+    display: inline-flex;
+  }
+
+  body.sidebar-collapsed .app-sidebar.sidebar-hover-open .nav-tab[data-tooltip]:hover::after,
+  body.sidebar-collapsed .app-sidebar:hover .nav-tab[data-tooltip]:hover::after {
+    content: none;
+  }
+}
+
 /* Pie del Sidebar */
 .sidebar-footer {
   padding: 12px 14px;
@@ -298,6 +364,19 @@ body.sidebar-collapsed .sidebar-footer {
 
 body.sidebar-collapsed .sidebar-footer-text {
   display: none;
+}
+
+@media (min-width: 1025px) {
+  body.sidebar-collapsed .app-sidebar.sidebar-hover-open .sidebar-footer,
+  body.sidebar-collapsed .app-sidebar:hover .sidebar-footer {
+    justify-content: flex-start;
+    padding: 12px 14px;
+  }
+
+  body.sidebar-collapsed .app-sidebar.sidebar-hover-open .sidebar-footer-text,
+  body.sidebar-collapsed .app-sidebar:hover .sidebar-footer-text {
+    display: inline;
+  }
 }
 
 /* Botón hamburguesa móvil (oculto en desktop) */

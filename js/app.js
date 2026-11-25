@@ -697,7 +697,7 @@ async function initApp() {
     const meta = await TaDaDB.getMeta('last_sync');
 
     // Detectar caché obsoleto, incompleto o con esquema previo
-    const CACHE_VERSION = '2026-11-24-v122-sidebar-ux-meli';
+    const CACHE_VERSION = '2026-11-25-v123-sidebar-auto-hover';
     const cachedVersion = await TaDaDB.getMeta('cache_version');
     const versionMismatch = cachedVersion !== CACHE_VERSION;
     const cachedCities = new Set(cachedMalla.map(r => r.city).filter(Boolean));
@@ -934,15 +934,42 @@ function setupEventListeners() {
 
   const applySidebarCollapsed = (collapsed) => {
     document.body.classList.toggle('sidebar-collapsed', collapsed);
-    if (btnSidebarToggle) btnSidebarToggle.textContent = collapsed ? '▶' : '◀';
+    if (!collapsed && appSidebar) appSidebar.classList.remove('sidebar-hover-open');
+    if (btnSidebarToggle) {
+      btnSidebarToggle.textContent = collapsed ? '▶' : '◀';
+      btnSidebarToggle.title = collapsed ? 'Fijar menú lateral abierto' : 'Activar modo compacto automático';
+    }
     try { localStorage.setItem('pibox_sidebar_collapsed', collapsed ? '1' : '0'); } catch (_) {}
   };
 
+  // Por defecto inicia en modo compacto automático (hover para desplegar) salvo que el usuario lo fije abierto
   try {
-    if (localStorage.getItem('pibox_sidebar_collapsed') === '1') {
-      applySidebarCollapsed(true);
-    }
-  } catch (_) {}
+    const savedSidebar = localStorage.getItem('pibox_sidebar_collapsed');
+    applySidebarCollapsed(savedSidebar !== '0');
+  } catch (_) {
+    applySidebarCollapsed(true);
+  }
+
+  let sidebarHoverTimer = null;
+  if (appSidebar) {
+    appSidebar.addEventListener('mouseenter', () => {
+      if (window.innerWidth <= 1024 || !document.body.classList.contains('sidebar-collapsed')) return;
+      if (sidebarHoverTimer) {
+        clearTimeout(sidebarHoverTimer);
+        sidebarHoverTimer = null;
+      }
+      appSidebar.classList.add('sidebar-hover-open');
+    });
+
+    appSidebar.addEventListener('mouseleave', () => {
+      if (window.innerWidth <= 1024) return;
+      if (sidebarHoverTimer) clearTimeout(sidebarHoverTimer);
+      sidebarHoverTimer = setTimeout(() => {
+        appSidebar.classList.remove('sidebar-hover-open');
+        sidebarHoverTimer = null;
+      }, 140);
+    });
+  }
 
   if (btnSidebarToggle) {
     btnSidebarToggle.addEventListener('click', () => {
