@@ -697,7 +697,7 @@ async function initApp() {
     const meta = await TaDaDB.getMeta('last_sync');
 
     // Detectar caché obsoleto, incompleto o con esquema previo
-    const CACHE_VERSION = '2026-11-25-v123-sidebar-auto-hover';
+    const CACHE_VERSION = '2026-11-25-v124-sidebar-layout-sync';
     const cachedVersion = await TaDaDB.getMeta('cache_version');
     const versionMismatch = cachedVersion !== CACHE_VERSION;
     const cachedCities = new Set(cachedMalla.map(r => r.city).filter(Boolean));
@@ -934,7 +934,7 @@ function setupEventListeners() {
 
   const applySidebarCollapsed = (collapsed) => {
     document.body.classList.toggle('sidebar-collapsed', collapsed);
-    if (!collapsed && appSidebar) appSidebar.classList.remove('sidebar-hover-open');
+    if (!collapsed) document.body.classList.remove('sidebar-hover-expanded');
     if (btnSidebarToggle) {
       btnSidebarToggle.textContent = collapsed ? '▶' : '◀';
       btnSidebarToggle.title = collapsed ? 'Fijar menú lateral abierto' : 'Activar modo compacto automático';
@@ -958,14 +958,14 @@ function setupEventListeners() {
         clearTimeout(sidebarHoverTimer);
         sidebarHoverTimer = null;
       }
-      appSidebar.classList.add('sidebar-hover-open');
+      document.body.classList.add('sidebar-hover-expanded');
     });
 
     appSidebar.addEventListener('mouseleave', () => {
       if (window.innerWidth <= 1024) return;
       if (sidebarHoverTimer) clearTimeout(sidebarHoverTimer);
       sidebarHoverTimer = setTimeout(() => {
-        appSidebar.classList.remove('sidebar-hover-open');
+        document.body.classList.remove('sidebar-hover-expanded');
         sidebarHoverTimer = null;
       }, 140);
     });
