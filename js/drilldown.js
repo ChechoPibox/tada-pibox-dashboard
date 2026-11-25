@@ -9,8 +9,11 @@ const DrilldownEngine = {
   // Estado interno de la consulta modal activa
   currentContext: null,
   filteredRecords: [],
-  currentPage: 1,
-  pageSize: 25,
+  groupedDates: [],
+  expandedDates: new Set(),
+  datePageMap: {},
+  datePageSize: 15,
+  lastPeriodContext: null,
   filtersExpanded: false,
 
   /**
@@ -77,26 +80,93 @@ const DrilldownEngine = {
   },
 
   /**
+   * Resuelve el periodo y filtros globales activos del dashboard sin cargar histórico fuera de rango
+   */
+  getActivePeriodContext(options = {}) {
+    if (typeof AppState === 'undefined') {
+      return { shifts: [], periodLabel: 'Periodo activo', startDate: '', endDate: '' };
+    }
+
+    const getDomVal = (id) => (typeof document !== 'undefined' ? (document.getElementById(id)?.value || '') : '');
+    const fromRaw = getDomVal('filterFrom');
+    const toRaw = getDomVal('filterTo');
+    const fromIso = typeof parseHybridDate === 'function' ? parseHybridDate(fromRaw) : fromRaw;
+    const toIso = typeof parseHybridDate === 'function' ? parseHybridDate(toRaw) : toRaw;
+    const globalCity = getDomVal('filterCity');
+    const globalStore = getDomVal('filterStore');
+    const globalPilot = getDomVal('filterPilot').trim().toLowerCase();
+
+    if (options.scope === 'modulo3') {
+      const weeks = (AppState.availableWeeks && AppState.availableWeeks.length > 0)
+        ? AppState.availableWeeks
+        : [];
+      const weekKeyOrObj = AppState.selectedModulo3Week;
+      let selW = null;
+      if (weekKeyOrObj && typeof weekKeyOrObj === 'object') {
+        selW = weekKeyOrObj;
+      } else if (typeof weekKeyOrObj === 'string') {
+        selW = weeks.find(w => w.weekKey === weekKeyOrObj) || null;
+      }
+
+      let startDate = selW ? selW.startDate : '';
+      let endDate = selW ? selW.endDate : '';
+
+      // Si también hay rango global en los DatePickers, respetar la intersección más estricta
+      if (fromIso) startDate = (!startDate || fromIso > startDate) ? fromIso : startDate;
+      if (toIso) endDate = (!endDate || toIso < endDate) ? toIso : endDate;
+
+      const shifts = (AppState.mallaShifts || []).filter(s => {
+        if (globalCity && s.city !== globalCity) return false;
+        if (globalStore && s.store !== globalStore) return false;
+        if (globalPilot) {
+          const matchP = (s.pilot || '').toLowerCase().includes(globalPilot);
+          const matchId = (s.pilot_id || '').toLowerCase().includes(globalPilot);
+          if (!matchP && !matchId) return false;
+        }
+        if (startDate || endDate) {
+          if (typeof isDateInRangeWithNoonCut === 'function') {
+            return isDateInRangeWithNoonCut(s.date, startDate, endDate);
+          }
+          if (startDate && s.date < startDate) return false;
+          if (endDate && s.date > endDate) return false;
+        }
+        return true;
+      });
+
+      const periodLabel = selW && selW.label
+        ? `${selW.label} (${startDate} al ${endDate})`
+        : (startDate || endDate ? `Periodo: ${startDate || '...'} al ${endDate || '...'}` : 'Semana activa Módulo 3');
+
+      return { shifts, periodLabel, startDate, endDate };
+    }
+
+    // Módulo 1 y consultas generales: heredar estrictamente AppState.filteredMalla (nunca caer al histórico completo si hay 0 resultados)
+    const shifts = Array.isArray(AppState.filteredMalla)
+      ? AppState.filteredMalla
+      : (AppState.mallaShifts || []);
+
+    let periodLabel = 'Periodo activo del dashboard';
+    if (fromIso && toIso && fromIso === toIso) {
+      periodLabel = `Jornada: ${fromIso}`;
+    } else if (fromIso || toIso) {
+      periodLabel = `Periodo: ${fromIso || '...'} al ${toIso || '...'}`;
+    } else {
+      const semanaEl = typeof document !== 'undefined' ? document.getElementById('filterSemana') : null;
+      if (semanaEl && semanaEl.value && semanaEl.selectedIndex >= 0) {
+        periodLabel = semanaEl.options[semanaEl.selectedIndex].text || periodLabel;
+      }
+    }
+
+    return { shifts, periodLabel, startDate: fromIso || '', endDate: toIso || '' };
+  },
+
+  /**
    * Calcula el conjunto estricto de registros para cada tipo de consulta
    */
   resolveSourceRecords(type, options = {}) {
-    // Tomar los turnos de la semana activa en Módulo 3 o AppState.filteredMalla
-    let baseShifts = [];
-    if (typeof AppState !== 'undefined') {
-      if (options.scope === 'modulo3' && AppState.selectedModulo3Week) {
-        const selW = AppState.selectedModulo3Week;
-        baseShifts = AppState.mallaShifts.filter(s => {
-          if (typeof isDateInRangeWithNoonCut === 'function') {
-            return isDateInRangeWithNoonCut(s.date, selW.startDate, selW.endDate);
-          }
-          return s.date >= selW.startDate && s.date <= selW.endDate;
-        });
-      } else {
-        baseShifts = (AppState.filteredMalla && AppState.filteredMalla.length > 0)
-          ? AppState.filteredMalla
-          : AppState.mallaShifts;
-      }
-    }
+    const periodCtx = this.getActivePeriodContext(options);
+    this.lastPeriodContext = periodCtx;
+    const baseShifts = periodCtx.shifts;
 
     // Filtrar según el tipo de drill-down
     switch (type) {
@@ -260,20 +330,30 @@ const DrilldownEngine = {
       }
     };
 
-    this.currentPage = 1;
+    this.expandedDates = new Set();
+    this.datePageMap = {};
 
-    // Actualizar Header
+    // Actualizar Header y Badge de Periodo Heredado
     const titleEl = document.getElementById('drilldownModalTitle');
     const subtitleEl = document.getElementById('drilldownModalSubtitle');
     const iconEl = document.getElementById('drilldownModalIcon');
+    const periodEl = document.getElementById('drilldownPeriodBadge');
     if (titleEl) titleEl.innerText = title;
     if (subtitleEl) subtitleEl.innerText = subtitle;
     if (iconEl) iconEl.innerText = icon;
+    if (periodEl) {
+      const pLabel = this.lastPeriodContext?.periodLabel || '';
+      if (pLabel) {
+        periodEl.textContent = `📅 ${pLabel}`;
+        periodEl.style.display = 'inline-flex';
+      } else {
+        periodEl.style.display = 'none';
+      }
+    }
 
     // Colapsar panel de filtros por defecto y adaptar al contexto
     this.setFiltersExpanded(false);
     this.adaptFiltersToContext();
-    this.renderTableHead();
 
     // Llenar selectores desplegables
     this.populateFilters();
@@ -478,11 +558,13 @@ const DrilldownEngine = {
       return true;
     });
 
-    this.currentPage = 1;
+    this.expandedDates = new Set();
+    this.datePageMap = {};
+    this.groupRecordsByDate();
     this.renderActiveFilterChips();
     this.renderSummaryStrip();
-    this.renderTablePage();
-    this.renderPagination();
+    this.renderAccordionList();
+    this.renderFooter();
   },
 
   /**
@@ -561,10 +643,14 @@ const DrilldownEngine = {
     });
 
     const isFiltered = total !== totalOriginal;
+    const datesCount = this.groupedDates.length;
 
     container.innerHTML = `
       <div class="drilldown-summary-chip chip-count">
-        <span>📋</span> Total Registros: <strong>${total.toLocaleString()}</strong> ${isFiltered ? `<span style="opacity:0.75;font-size:0.7rem;">(de ${totalOriginal})</span>` : ''}
+        <span>📋</span> Total: <strong>${total.toLocaleString()}</strong> ${isFiltered ? `<span style="opacity:0.75;font-size:0.7rem;">(de ${totalOriginal})</span>` : ''}
+      </div>
+      <div class="drilldown-summary-chip">
+        <span>📅</span> Fechas: <strong>${datesCount}</strong>
       </div>
       ${vacancyCount > 0 ? `
         <div class="drilldown-summary-chip" style="border-color:rgba(239,68,68,0.4); background:rgba(239,68,68,0.12); color:#fca5a5;">
@@ -590,142 +676,238 @@ const DrilldownEngine = {
   },
 
   /**
-   * Define las columnas adaptativas según el origen de la consulta
+   * Formatea una fecha ISO (YYYY-MM-DD) en formato legible en español
+   */
+  formatSpanishDate(isoDate) {
+    if (!isoDate || isoDate.length < 10) return isoDate || 'Sin Fecha';
+    const parts = isoDate.split('-');
+    if (parts.length !== 3) return isoDate;
+    const months = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+    const mIdx = parseInt(parts[1], 10) - 1;
+    const day = parseInt(parts[2], 10);
+    if (isNaN(mIdx) || mIdx < 0 || mIdx > 11 || isNaN(day)) return isoDate;
+    return `${day} de ${months[mIdx]} de ${parts[0]}`;
+  },
+
+  /**
+   * Agrupa los registros filtrados cronológicamente por fecha
+   */
+  groupRecordsByDate() {
+    const map = new Map();
+    this.filteredRecords.forEach(r => {
+      const dateKey = r.date || 'Sin Fecha';
+      if (!map.has(dateKey)) {
+        const wDay = typeof canonicalizeWeekday === 'function' ? canonicalizeWeekday(r.weekday, r.date) : (r.weekday || '');
+        map.set(dateKey, { date: dateKey, weekday: wDay, records: [] });
+      }
+      map.get(dateKey).records.push(r);
+    });
+
+    this.groupedDates = Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date));
+    return this.groupedDates;
+  },
+
+  /**
+   * Define las columnas compactas dentro de cada fecha desplegada
    */
   getColumnConfig(type) {
     const base = [
-      { key: 'idx', label: '#', style: 'width: 40px; text-align: center;' },
-      { key: 'date', label: 'Fecha', style: 'min-width: 95px;' },
-      { key: 'weekday', label: 'Día', style: 'min-width: 85px;' },
-      { key: 'city', label: 'Ciudad', style: 'min-width: 95px;' },
-      { key: 'store', label: 'Tienda / Punto', style: 'min-width: 170px;' },
-      { key: 'start', label: 'Hora Inicio', style: 'min-width: 75px; text-align: center;' },
-      { key: 'pilot', label: 'Piloto / ID', style: 'min-width: 160px;' },
-      { key: 'status', label: 'Estado Turno', style: 'min-width: 110px; text-align: center;' }
+      { key: 'idx', label: '#', style: 'width: 38px; text-align: center;' },
+      { key: 'start', label: 'Hora', style: 'min-width: 65px; text-align: center;' },
+      { key: 'city', label: 'Ciudad', style: 'min-width: 90px;' },
+      { key: 'store', label: 'Tienda / Punto', style: 'min-width: 165px;' },
+      { key: 'pilot', label: 'Piloto / ID', style: 'min-width: 150px;' },
+      { key: 'status', label: 'Estado', style: 'min-width: 105px; text-align: center;' }
     ];
 
     if (type === 'card_cancellations') {
       return [
         ...base,
-        { key: 'reason', label: 'Tipo Cancelación', style: 'min-width: 150px; text-align: center;' }
+        { key: 'reason', label: 'Tipo Cancelación', style: 'min-width: 145px; text-align: center;' }
       ];
     }
 
     if (type === 'card_vacancies') {
       return [
-        ...base.filter(c => c.key !== 'weekday'),
-        { key: 'reason', label: 'Cobertura / Match', style: 'min-width: 170px; text-align: center;' }
+        ...base,
+        { key: 'reason', label: 'Cobertura / Match', style: 'min-width: 165px; text-align: center;' }
       ];
     }
 
     return [
       ...base,
-      { key: 'reason', label: 'Clasificación Operativa', style: 'min-width: 140px; text-align: center;' },
-      { key: 'load', label: 'Carga / Horas', style: 'min-width: 110px; text-align: center;' }
+      { key: 'reason', label: 'Clasificación', style: 'min-width: 135px; text-align: center;' }
     ];
   },
 
   /**
-   * Renderiza los encabezados de columna adaptativos
+   * Renderiza la lista de fechas contraídas en orden cronológico
    */
-  renderTableHead() {
-    const thead = document.getElementById('drilldownTableHead');
-    if (!thead) return;
-    const cols = this.getColumnConfig(this.currentContext?.type);
-    thead.innerHTML = `<tr>${cols.map(c => `<th style="${c.style}">${c.label}</th>`).join('')}</tr>`;
-  },
+  renderAccordionList() {
+    const container = document.getElementById('drilldownAccordionContainer');
+    if (!container) return;
 
-  /**
-   * Renderiza la página actual de la tabla
-   */
-  renderTablePage() {
-    const tbody = document.getElementById('drilldownTableBody');
-    if (!tbody) return;
-
-    const cols = this.getColumnConfig(this.currentContext?.type);
-
-    if (this.filteredRecords.length === 0) {
-      tbody.innerHTML = `
-        <tr>
-          <td colspan="${cols.length}">
-            <div class="drilldown-empty-state">
-              <div class="empty-icon">🔎</div>
-              <h4>No se encontraron registros</h4>
-              <p>No hay turnos que coincidan con la combinación de filtros seleccionada dentro de esta consulta.</p>
-            </div>
-          </td>
-        </tr>
+    if (this.groupedDates.length === 0) {
+      container.innerHTML = `
+        <div class="drilldown-empty-state">
+          <div class="empty-icon">🔎</div>
+          <h4>No se encontraron registros</h4>
+          <p>No hay turnos dentro del periodo y filtros seleccionados para esta consulta.</p>
+        </div>
       `;
       return;
     }
 
-    const startIdx = (this.currentPage - 1) * this.pageSize;
-    const pageRecords = this.filteredRecords.slice(startIdx, startIdx + this.pageSize);
+    const type = this.currentContext?.type;
 
-    tbody.innerHTML = pageRecords.map((r, i) => {
-      const idxGlobal = startIdx + i + 1;
+    container.innerHTML = this.groupedDates.map(group => {
+      const safeDateId = group.date.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const isExpanded = this.expandedDates.has(group.date);
+      const count = group.records.length;
+      const label = this.formatSpanishDate(group.date);
+
+      // Mini-resumen contextual por fecha
+      let extraMeta = '';
+      if (type === 'card_vacancies') {
+        const unmatched = group.records.filter(r => r._isUnmatchedVacancy).length;
+        const matched = count - unmatched;
+        if (unmatched > 0) extraMeta += `<span class="table-pct-badge badge-rose" style="font-size:0.7rem;">${unmatched} sin cubrir</span>`;
+        if (matched > 0) extraMeta += `<span class="table-pct-badge badge-cyan" style="font-size:0.7rem;">${matched} con reemplazo</span>`;
+      } else if (type === 'card_cancellations') {
+        const pilotC = group.records.filter(r => r._drilldownReason === 'Cancelación de Piloto').length;
+        const clientC = count - pilotC;
+        if (pilotC > 0) extraMeta += `<span class="table-pct-badge badge-rose" style="font-size:0.7rem;">${pilotC} piloto</span>`;
+        if (clientC > 0) extraMeta += `<span class="table-pct-badge badge-amber" style="font-size:0.7rem;">${clientC} cliente</span>`;
+      }
+
+      return `
+        <div class="drilldown-date-group ${isExpanded ? 'expanded' : ''}" id="ddGroup_${safeDateId}">
+          <button type="button" class="drilldown-date-header" onclick="DrilldownEngine.toggleDateGroup('${escapeHtml(group.date)}')">
+            <div class="drilldown-date-title-wrap">
+              <span>📅</span>
+              <span class="drilldown-date-label">${escapeHtml(label)}</span>
+              ${group.weekday ? `<span class="pill pill-neutral" style="font-size:0.7rem;">${escapeHtml(group.weekday)}</span>` : ''}
+            </div>
+            <div class="drilldown-date-meta">
+              ${extraMeta}
+              <span class="drilldown-date-count">${count} ${count === 1 ? 'registro' : 'registros'}</span>
+              <span class="drilldown-date-chevron">▸</span>
+            </div>
+          </button>
+          <div class="drilldown-date-body" id="ddBody_${safeDateId}">
+            ${isExpanded ? this.buildDateBodyHtml(group.date) : ''}
+          </div>
+        </div>
+      `;
+    }).join('');
+  },
+
+  /**
+   * Despliega o contrae una fecha bajo demanda
+   */
+  toggleDateGroup(dateKey) {
+    const safeDateId = dateKey.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const groupEl = document.getElementById(`ddGroup_${safeDateId}`);
+    const bodyEl = document.getElementById(`ddBody_${safeDateId}`);
+
+    if (this.expandedDates.has(dateKey)) {
+      this.expandedDates.delete(dateKey);
+      if (groupEl) groupEl.classList.remove('expanded');
+    } else {
+      this.expandedDates.add(dateKey);
+      if (!this.datePageMap[dateKey]) this.datePageMap[dateKey] = 1;
+      if (bodyEl) bodyEl.innerHTML = this.buildDateBodyHtml(dateKey);
+      if (groupEl) groupEl.classList.add('expanded');
+    }
+  },
+
+  /**
+   * Construye la tabla compacta (y paginación interna si aplica) para una sola fecha
+   */
+  buildDateBodyHtml(dateKey) {
+    const group = this.groupedDates.find(g => g.date === dateKey);
+    if (!group || group.records.length === 0) return '';
+
+    const cols = this.getColumnConfig(this.currentContext?.type);
+    const total = group.records.length;
+    const totalPages = Math.ceil(total / this.datePageSize) || 1;
+    const curPage = Math.max(1, Math.min(this.datePageMap[dateKey] || 1, totalPages));
+    this.datePageMap[dateKey] = curPage;
+
+    const startIdx = (curPage - 1) * this.datePageSize;
+    const pageRecords = group.records.slice(startIdx, startIdx + this.datePageSize);
+
+    const rowsHtml = pageRecords.map((r, i) => {
+      const idxLocal = startIdx + i + 1;
       const startStr = (r.start != null) ? (typeof fmtMinutes === 'function' ? fmtMinutes(r.start) : `${Math.floor(r.start/60)}:00`) : '—';
-      const hoursCount = (r.hours != null && !isNaN(r.hours) && r.hours > 0) ? `${r.hours}h` : '8h';
-      const packagesCount = (r.packages != null && !isNaN(r.packages)) ? r.packages : 0;
-
       const pilotName = r.pilot && String(r.pilot).trim() !== '' ? r.pilot : (r.pilot_id || 'Sin Asignar');
       const storeShort = (r.store || 'Sin Tienda').split(' - ')[0];
-      const weekdayStr = typeof canonicalizeWeekday === 'function' ? canonicalizeWeekday(r.weekday, r.date) : (r.weekday || '—');
-
       const statusBadge = r.status ? `<span class="pill pill-neutral">${escapeHtml(r.status)}</span>` : '<span class="pill pill-danger">Sin Estado</span>';
       const reasonBadge = r._drilldownReason
         ? `<span class="table-pct-badge ${r._drilldownBadge || 'badge-muted'}" style="font-size:0.72rem;">${escapeHtml(r._drilldownReason)}</span>`
         : statusBadge;
 
       const cellMap = {
-        idx: `<td style="text-align:center;color:var(--text-muted);font-size:0.72rem;">${idxGlobal}</td>`,
-        date: `<td style="white-space:nowrap;font-weight:600;color:#fff;">${escapeHtml(r.date || '—')}</td>`,
-        weekday: `<td style="white-space:nowrap;"><span class="pill pill-neutral" style="font-size:0.7rem;">${escapeHtml(weekdayStr)}</span></td>`,
-        city: `<td style="white-space:nowrap;"><strong>${escapeHtml(r.city || '—')}</strong></td>`,
-        store: `<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(r.store || '')}">${escapeHtml(storeShort)}</td>`,
+        idx: `<td style="text-align:center;color:var(--text-muted);font-size:0.72rem;">${idxLocal}</td>`,
         start: `<td style="text-align:center;font-weight:700;color:#a78bfa;">${startStr}</td>`,
-        pilot: `<td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(pilotName)}">${escapeHtml(pilotName)}</td>`,
+        city: `<td style="white-space:nowrap;"><strong>${escapeHtml(r.city || '—')}</strong></td>`,
+        store: `<td style="max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(r.store || '')}">${escapeHtml(storeShort)}</td>`,
+        pilot: `<td style="max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(pilotName)}">${escapeHtml(pilotName)}</td>`,
         status: `<td style="text-align:center;">${statusBadge}</td>`,
-        reason: `<td style="text-align:center;">${reasonBadge}</td>`,
-        load: `<td style="text-align:center;color:var(--text-muted);">${packagesCount} paq · ${hoursCount}</td>`
+        reason: `<td style="text-align:center;">${reasonBadge}</td>`
       };
 
       return `<tr>${cols.map(c => cellMap[c.key] || '').join('')}</tr>`;
     }).join('');
-  },
 
-  /**
-   * Renderiza los controles de paginación
-   */
-  renderPagination() {
-    const footer = document.getElementById('drilldownModalFooter');
-    if (!footer) return;
-
-    const total = this.filteredRecords.length;
-    const totalPages = Math.ceil(total / this.pageSize) || 1;
-
-    const startIdx = total === 0 ? 0 : (this.currentPage - 1) * this.pageSize + 1;
-    const endIdx = Math.min(this.currentPage * this.pageSize, total);
-
-    footer.innerHTML = `
-      <div>
-        Mostrando registros <strong>${startIdx}</strong> a <strong>${endIdx}</strong> de <strong>${total.toLocaleString()}</strong>
+    const paginationHtml = totalPages > 1 ? `
+      <div class="drilldown-date-pagination">
+        <span>Mostrando ${startIdx + 1}–${Math.min(startIdx + this.datePageSize, total)} de ${total}</span>
+        <div class="drilldown-pagination-controls">
+          <button type="button" class="drilldown-page-btn" ${curPage <= 1 ? 'disabled' : ''} onclick="DrilldownEngine.goToDatePage('${escapeHtml(dateKey)}', ${curPage - 1})">Anterior</button>
+          <span style="padding:0 6px;font-weight:700;color:#c4b5fd;">${curPage} / ${totalPages}</span>
+          <button type="button" class="drilldown-page-btn" ${curPage >= totalPages ? 'disabled' : ''} onclick="DrilldownEngine.goToDatePage('${escapeHtml(dateKey)}', ${curPage + 1})">Siguiente</button>
+        </div>
       </div>
-      <div class="drilldown-pagination-controls">
-        <button class="drilldown-page-btn" ${this.currentPage <= 1 ? 'disabled' : ''} onclick="DrilldownEngine.goToPage(1)" title="Primera página">«</button>
-        <button class="drilldown-page-btn" ${this.currentPage <= 1 ? 'disabled' : ''} onclick="DrilldownEngine.goToPage(${this.currentPage - 1})">Anterior</button>
-        <span style="padding:0 8px;font-weight:700;color:#c4b5fd;">Página ${this.currentPage} de ${totalPages}</span>
-        <button class="drilldown-page-btn" ${this.currentPage >= totalPages ? 'disabled' : ''} onclick="DrilldownEngine.goToPage(${this.currentPage + 1})">Siguiente</button>
-        <button class="drilldown-page-btn" ${this.currentPage >= totalPages ? 'disabled' : ''} onclick="DrilldownEngine.goToPage(${totalPages})" title="Última página">»</button>
+    ` : '';
+
+    return `
+      <div class="drilldown-table-wrapper">
+        <table class="drilldown-table">
+          <thead><tr>${cols.map(c => `<th style="${c.style}">${c.label}</th>`).join('')}</tr></thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
       </div>
+      ${paginationHtml}
     `;
   },
 
-  goToPage(p) {
-    const totalPages = Math.ceil(this.filteredRecords.length / this.pageSize) || 1;
-    this.currentPage = Math.max(1, Math.min(p, totalPages));
-    this.renderTablePage();
-    this.renderPagination();
+  /**
+   * Pagina internamente dentro de una fecha desplegada sin recargar las demás
+   */
+  goToDatePage(dateKey, page) {
+    this.datePageMap[dateKey] = page;
+    const safeDateId = dateKey.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const bodyEl = document.getElementById(`ddBody_${safeDateId}`);
+    if (bodyEl) bodyEl.innerHTML = this.buildDateBodyHtml(dateKey);
+  },
+
+  /**
+   * Renderiza el pie informativo de la consulta agrupada
+   */
+  renderFooter() {
+    const footer = document.getElementById('drilldownModalFooter');
+    if (!footer) return;
+    const total = this.filteredRecords.length;
+    const datesCount = this.groupedDates.length;
+    footer.innerHTML = `
+      <div>
+        Mostrando <strong>${datesCount}</strong> ${datesCount === 1 ? 'fecha' : 'fechas'} · <strong>${total.toLocaleString()}</strong> ${total === 1 ? 'registro' : 'registros'} en total
+      </div>
+      <div style="font-size:0.74rem;color:var(--text-muted);">
+        Haz clic en cualquier fecha para desplegar o contraer su detalle
+      </div>
+    `;
   },
 
   /**

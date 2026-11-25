@@ -697,7 +697,7 @@ async function initApp() {
     const meta = await TaDaDB.getMeta('last_sync');
 
     // Detectar caché obsoleto, incompleto o con esquema previo
-    const CACHE_VERSION = '2026-11-25-v124-sidebar-layout-sync';
+    const CACHE_VERSION = '2026-11-25-v125-drilldown-date-groups';
     const cachedVersion = await TaDaDB.getMeta('cache_version');
     const versionMismatch = cachedVersion !== CACHE_VERSION;
     const cachedCities = new Set(cachedMalla.map(r => r.city).filter(Boolean));

@@ -13,7 +13,7 @@
   <meta name="referrer" content="strict-origin-when-cross-origin">
   
   <link rel="stylesheet" href="./css/styles.css?v=20261124_v122">
-  <link rel="stylesheet" href="./css/drilldown.css?v=20261124_v122">
+  <link rel="stylesheet" href="./css/drilldown.css?v=20261125_v125">
   <link rel="stylesheet" href="./css/sidebar.css?v=20261125_v124">
   <link rel="icon" href="./assets/logo_pibox_tada.jpg" type="image/jpeg">
 </head>
@@ -1382,6 +1382,7 @@
           <div class="drilldown-header-titles">
             <h3 id="drilldownModalTitle">Detalle de Registros Operativos</h3>
             <p id="drilldownModalSubtitle">Trazabilidad detallada según los criterios oficiales y filtros activos</p>
+            <span id="drilldownPeriodBadge" class="drilldown-period-badge" style="display:none;"></span>
           </div>
         </div>
         <button id="btnDrilldownClose" class="drilldown-close-btn" title="Cerrar consulta (Esc)">✕</button>
@@ -1444,28 +1445,10 @@
         </div>
       </div>
 
-      <!-- Cuerpo con Tabla de Registros -->
+      <!-- Cuerpo con Lista Agrupada por Fecha Desplegable -->
       <div class="drilldown-modal-body">
-        <div class="drilldown-table-wrapper">
-          <table class="drilldown-table">
-            <thead id="drilldownTableHead">
-              <tr>
-                <th style="width: 40px; text-align: center;">#</th>
-                <th style="min-width: 95px;">Fecha</th>
-                <th style="min-width: 85px;">Día</th>
-                <th style="min-width: 95px;">Ciudad</th>
-                <th style="min-width: 170px;">Tienda / Punto</th>
-                <th style="min-width: 75px; text-align: center;">Hora Inicio</th>
-                <th style="min-width: 160px;">Piloto / ID</th>
-                <th style="min-width: 110px; text-align: center;">Estado Turno</th>
-                <th style="min-width: 140px; text-align: center;">Clasificación Operativa</th>
-                <th style="min-width: 110px; text-align: center;">Carga / Horas</th>
-              </tr>
-            </thead>
-            <tbody id="drilldownTableBody">
-              <!-- Renderizado dinámicamente -->
-            </tbody>
-          </table>
+        <div id="drilldownAccordionContainer" class="drilldown-accordion-list">
+          <!-- Renderizado dinámicamente por fecha -->
         </div>
       </div>
 
@@ -1822,9 +1805,9 @@
   <script src="./js/coverage-engine.js?v=20261124_v120"></script>
   <script src="./js/charts.js?v=20261124_v122"></script>
   <script src="./js/data.js?v=data_20261120"></script>
-  <script src="./js/drilldown.js?v=20261124_v122"></script>
+  <script src="./js/drilldown.js?v=20261125_v125"></script>
   <script src="./js/llamados-service.js?v=20261124_v121"></script>
-  <script src="./js/app.js?v=20261125_v124"></script>
+  <script src="./js/app.js?v=20261125_v125"></script>
 </body>
 </html>
 
